@@ -1,6 +1,7 @@
 class Trip {
   final String id;
   final String driverId;
+  final String? driverName;
   final String origin;
   final String destination;
   final DateTime date;
@@ -13,6 +14,7 @@ class Trip {
   Trip({
     required this.id,
     required this.driverId,
+    this.driverName,
     required this.origin,
     required this.destination,
     required this.date,
@@ -27,6 +29,7 @@ class Trip {
     return Trip(
       id: json['id'] as String,
       driverId: json['driverId'] as String,
+      driverName: json['driverName'] as String?,
       origin: json['origin'] as String,
       destination: json['destination'] as String,
       date: DateTime.parse(json['date'] as String),
@@ -42,6 +45,7 @@ class Trip {
     return {
       'id': id,
       'driverId': driverId,
+      'driverName': driverName,
       'origin': origin,
       'destination': destination,
       'date': date.toIso8601String(),

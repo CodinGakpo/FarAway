@@ -93,11 +93,59 @@ class ApiService {
     });
   }
 
+  Future<Trip?> getActiveTrip() async {
+    final response = await _client.get(
+      _buildUri('${AppConstants.TRIPS}/active'),
+      headers: await _headers(),
+    );
+
+    if (response.statusCode == 204 || response.statusCode == 404) {
+      return null;
+    }
+
+    return _handleResponse(response, (body) {
+      if (body == null) {
+        return null;
+      }
+
+      if (body is Map<String, dynamic>) {
+        final data = body['trip'];
+        if (data is Map<String, dynamic>) {
+          return Trip.fromJson(data);
+        }
+
+        final activeTrip = body['activeTrip'];
+        if (activeTrip is Map<String, dynamic>) {
+          return Trip.fromJson(activeTrip);
+        }
+
+        if (body.isNotEmpty) {
+          return Trip.fromJson(body);
+        }
+      }
+
+      return null;
+    });
+  }
+
   Future<List<ShipmentRequest>> getIncomingRequests(String tripId) async {
     final response = await _get('${AppConstants.TRIPS}/$tripId/requests');
 
     return _handleResponse(response, (body) {
       final list = _extractList(body, ['requests', 'data', 'items']);
+      return list
+          .map((item) => ShipmentRequest.fromJson(
+                Map<String, dynamic>.from(item as Map),
+              ))
+          .toList();
+    });
+  }
+
+  Future<List<ShipmentRequest>> getTripShipments(String tripId) async {
+    final response = await _get('${AppConstants.TRIPS}/$tripId/shipments');
+
+    return _handleResponse(response, (body) {
+      final list = _extractList(body, ['shipments', 'data', 'items']);
       return list
           .map((item) => ShipmentRequest.fromJson(
                 Map<String, dynamic>.from(item as Map),
