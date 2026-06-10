@@ -10,8 +10,28 @@ import 'services/auth_provider.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await dotenv.load(fileName: '.env');
-  await Firebase.initializeApp();
+
+  // --- dotenv ---
+  try {
+    await dotenv.load(fileName: '.env');
+    debugPrint('[startup] dotenv loaded — BASE_URL=${dotenv.env['BASE_URL']}');
+  } catch (e) {
+    // App can still launch; API calls will fail until .env is populated.
+    debugPrint('[startup] dotenv load failed: $e');
+  }
+
+  // --- Firebase ---
+  // google-services.json (Android) and GoogleService-Info.plist (iOS) must be
+  // present for this to succeed. Until they are added the app still starts but
+  // Firebase features will be unavailable.
+  try {
+    await Firebase.initializeApp();
+    debugPrint('[startup] Firebase initialised');
+  } catch (e) {
+    debugPrint('[startup] Firebase init failed (config files missing?): $e');
+  }
+
+  debugPrint('[startup] calling runApp');
   runApp(const MyApp());
 }
 
@@ -58,8 +78,19 @@ class _AuthGateState extends State<_AuthGate> {
   }
 
   Future<void> _initializeAuth() async {
+    debugPrint('[_AuthGate] tryAutoLogin — start');
     final authProvider = context.read<AuthProvider>();
-    await authProvider.tryAutoLogin();
+
+    // Guard against a hung keychain read on first-boot / locked device.
+    await authProvider.tryAutoLogin().timeout(
+      const Duration(seconds: 10),
+      onTimeout: () {
+        debugPrint('[_AuthGate] tryAutoLogin timed out — proceeding as logged out');
+      },
+    );
+
+    debugPrint('[_AuthGate] tryAutoLogin — done; isLoggedIn=${authProvider.isLoggedIn}');
+
     if (!mounted) {
       return;
     }

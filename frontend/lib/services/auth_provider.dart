@@ -5,6 +5,8 @@ import 'package:flutter/foundation.dart';
 import '../models/user.dart';
 import 'api_service.dart';
 
+// ignore_for_file: avoid_print
+
 class AuthProvider extends ChangeNotifier {
   AuthProvider({ApiService? apiService})
       : _apiService = apiService ?? ApiService();
@@ -43,12 +45,22 @@ class AuthProvider extends ChangeNotifier {
   }
 
   Future<void> tryAutoLogin() async {
-    final token = await _apiService.getToken();
+    debugPrint('[AuthProvider] tryAutoLogin — reading stored token');
+    final String? token;
+    try {
+      token = await _apiService.getToken();
+    } catch (e) {
+      debugPrint('[AuthProvider] tryAutoLogin — secure storage read failed: $e');
+      return;
+    }
+
     if (token == null || token.isEmpty) {
+      debugPrint('[AuthProvider] tryAutoLogin — no token found');
       return;
     }
 
     final role = _extractRoleFromToken(token);
+    debugPrint('[AuthProvider] tryAutoLogin — token present, role=$role');
     currentUser = User(
       id: '',
       email: '',
