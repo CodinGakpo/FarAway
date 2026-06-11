@@ -1,11 +1,17 @@
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 class AppConstants {
-  static final String BASE_URL = dotenv.env['BASE_URL'] ?? '';
+  static final String BASE_URL =
+      dotenv.env['BASE_URL'] ?? 'http://localhost:8000';
 
-  static const String AUTH_REGISTER = '/auth/register';
+  // Auth endpoints
   static const String AUTH_LOGIN = '/auth/login';
+  static const String AUTH_ME = '/auth/me';
+
+  // Domain endpoints (kept for non-auth screens)
   static const String TRIPS = '/trips';
+  static const String LOADS = '/loads';
+  static const String MATCHES = '/matches';
   static const String SHIPMENTS = '/shipments';
   static const String BOOKINGS = '/bookings';
 

@@ -8,6 +8,12 @@ import '../models/shipment_request.dart';
 import '../models/trip.dart';
 import '../models/user.dart';
 
+// Thrown when the server returns 401 Unauthorized (token expired / invalid).
+class UnauthorizedException implements Exception {
+  @override
+  String toString() => 'Session expired. Please log in again.';
+}
+
 class ApiService {
   ApiService._internal();
 
@@ -22,6 +28,8 @@ class ApiService {
 
   String get _baseUrl => AppConstants.BASE_URL;
 
+  // ── Token storage ──────────────────────────────────────────────────────────
+
   Future<String?> getToken() {
     return _secureStorage.read(key: _tokenKey);
   }
@@ -34,40 +42,104 @@ class ApiService {
     return _secureStorage.delete(key: _tokenKey);
   }
 
+  // ── Auth ───────────────────────────────────────────────────────────────────
+
+  /// Signs in an existing user.
+  ///
+  /// The backend (LOCAL_DEV_MODE) does not verify passwords; the user is
+  /// identified by a deterministic ID derived from their email.  If the
+  /// user already exists in the database the server returns their stored
+  /// role, so the [password] parameter is accepted here for UI compatibility
+  /// but is not forwarded to the server.
+  Future<User> login(String email, String password) async {
+    final userId = _deriveUserId(email);
+    final name = _deriveName(email);
+
+    final response = await _post(
+      AppConstants.AUTH_LOGIN,
+      {
+        'id': userId,
+        'email': email,
+        // Default role sent on login — the backend returns the user's actual
+        // stored role when the account already exists, so this only matters
+        // for brand-new accounts (which should go through register instead).
+        'role': 'shipper',
+        'name': name,
+      },
+    );
+
+    return _handleResponse(response, (body) {
+      _assertMap(body, 'login');
+      final user = User.fromLoginResponse(
+        body as Map<String, dynamic>,
+        email: email,
+        name: name,
+      );
+      if (user.token.isEmpty) throw Exception('No access token in response');
+      return user;
+    });
+  }
+
+  /// Registers a new user.
+  ///
+  /// The backend's /auth/login endpoint creates the account when the ID does
+  /// not yet exist, so registration and login share the same endpoint.
   Future<User> register(
     String name,
     String email,
     String password,
     String role,
   ) async {
-    final response = await _post(
-      AppConstants.AUTH_REGISTER,
-      {
-        'name': name,
-        'email': email,
-        'password': password,
-        'role': role,
-      },
-    );
+    final userId = _deriveUserId(email);
+    // Normalise role: the register screen may emit 'customer' (UI label) but
+    // the backend only understands 'driver' and 'shipper'.
+    final backendRole = (role == 'customer') ? 'shipper' : role;
 
-    final user = _handleResponse(response, _parseUser);
-    await saveToken(user.token);
-    return user;
-  }
-
-  Future<User> login(String email, String password) async {
     final response = await _post(
       AppConstants.AUTH_LOGIN,
       {
+        'id': userId,
         'email': email,
-        'password': password,
+        'role': backendRole,
+        'name': name,
       },
     );
 
-    final user = _handleResponse(response, _parseUser);
-    await saveToken(user.token);
-    return user;
+    return _handleResponse(response, (body) {
+      _assertMap(body, 'register');
+      final user = User.fromLoginResponse(
+        body as Map<String, dynamic>,
+        email: email,
+        name: name,
+      );
+      if (user.token.isEmpty) throw Exception('No access token in response');
+      return user;
+    });
   }
+
+  /// Fetches the authenticated user's full profile from GET /auth/me.
+  ///
+  /// Uses [token] directly so this can be called before the token is
+  /// stored (e.g. to validate it on app startup).
+  Future<User> getMe(String token) async {
+    final response = await _client.get(
+      _buildUri(AppConstants.AUTH_ME),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+    );
+
+    return _handleResponse(response, (body) {
+      _assertMap(body, '/auth/me');
+      return User.fromMeResponse(
+        body as Map<String, dynamic>,
+        token: token,
+      );
+    });
+  }
+
+  // ── Trips ──────────────────────────────────────────────────────────────────
 
   Future<Trip> createTrip(
     String origin,
@@ -104,24 +176,16 @@ class ApiService {
     }
 
     return _handleResponse(response, (body) {
-      if (body == null) {
-        return null;
-      }
+      if (body == null) return null;
 
       if (body is Map<String, dynamic>) {
-        final data = body['trip'];
-        if (data is Map<String, dynamic>) {
-          return Trip.fromJson(data);
-        }
+        final trip = body['trip'];
+        if (trip is Map<String, dynamic>) return Trip.fromJson(trip);
 
         final activeTrip = body['activeTrip'];
-        if (activeTrip is Map<String, dynamic>) {
-          return Trip.fromJson(activeTrip);
-        }
+        if (activeTrip is Map<String, dynamic>) return Trip.fromJson(activeTrip);
 
-        if (body.isNotEmpty) {
-          return Trip.fromJson(body);
-        }
+        if (body.isNotEmpty) return Trip.fromJson(body);
       }
 
       return null;
@@ -159,7 +223,6 @@ class ApiService {
       '${AppConstants.BOOKINGS}/$shipmentId/accept',
       {},
     );
-
     _handleResponse(response, (_) => null);
   }
 
@@ -168,7 +231,6 @@ class ApiService {
       '${AppConstants.BOOKINGS}/$shipmentId/reject',
       {},
     );
-
     _handleResponse(response, (_) => null);
   }
 
@@ -177,7 +239,6 @@ class ApiService {
       '${AppConstants.SHIPMENTS}/$shipmentId/status',
       {'status': status},
     );
-
     _handleResponse(response, (_) => null);
   }
 
@@ -200,7 +261,8 @@ class ApiService {
     );
 
     return _handleResponse(response, (body) {
-      final data = _extractMap(body, ['shipment', 'data'], entityName: 'shipment');
+      final data =
+          _extractMap(body, ['shipment', 'data'], entityName: 'shipment');
       return ShipmentRequest.fromJson(data);
     });
   }
@@ -225,10 +287,13 @@ class ApiService {
     final response = await _get('${AppConstants.SHIPMENTS}/$shipmentId');
 
     return _handleResponse(response, (body) {
-      final data = _extractMap(body, ['shipment', 'data'], entityName: 'shipment');
+      final data =
+          _extractMap(body, ['shipment', 'data'], entityName: 'shipment');
       return ShipmentRequest.fromJson(data);
     });
   }
+
+  // ── HTTP helpers ───────────────────────────────────────────────────────────
 
   Future<http.Response> _get(String path) async {
     return _client.get(
@@ -258,32 +323,35 @@ class ApiService {
     if (token != null && token.isNotEmpty) {
       return AppConstants.headers(token);
     }
-
     return {'Content-Type': 'application/json'};
   }
 
   Uri _buildUri(String path) {
-    final normalizedBase = _baseUrl.endsWith('/')
+    final base = _baseUrl.endsWith('/')
         ? _baseUrl.substring(0, _baseUrl.length - 1)
         : _baseUrl;
-    final normalizedPath = path.startsWith('/') ? path : '/$path';
-    return Uri.parse('$normalizedBase$normalizedPath');
+    final segment = path.startsWith('/') ? path : '/$path';
+    return Uri.parse('$base$segment');
   }
 
-  T _handleResponse<T>(http.Response response, T Function(dynamic body) parser) {
+  // ── Response handling ──────────────────────────────────────────────────────
+
+  T _handleResponse<T>(
+      http.Response response, T Function(dynamic body) parser) {
     if (response.statusCode >= 200 && response.statusCode < 300) {
       final decoded = _decodeBody(response.body);
       return parser(decoded);
+    }
+
+    if (response.statusCode == 401) {
+      throw UnauthorizedException();
     }
 
     throw _buildHttpException(response);
   }
 
   dynamic _decodeBody(String body) {
-    if (body.trim().isEmpty) {
-      return null;
-    }
-
+    if (body.trim().isEmpty) return null;
     try {
       return jsonDecode(body);
     } catch (_) {
@@ -293,9 +361,9 @@ class ApiService {
 
   Exception _buildHttpException(http.Response response) {
     final decoded = _decodeBody(response.body);
-    final messageFromBody = _extractErrorMessage(decoded);
-    final message = messageFromBody ??
-        'Request failed with status ${response.statusCode}: ${response.reasonPhrase ?? 'Unknown error'}';
+    final message = _extractErrorMessage(decoded) ??
+        'Request failed with status ${response.statusCode}: '
+            '${response.reasonPhrase ?? 'Unknown error'}';
     return Exception(message);
   }
 
@@ -303,33 +371,22 @@ class ApiService {
     if (decoded is String && decoded.trim().isNotEmpty) {
       return decoded.trim();
     }
-
     if (decoded is Map<String, dynamic>) {
-      final candidates = ['message', 'error', 'detail', 'errors'];
-      for (final key in candidates) {
+      for (final key in ['message', 'error', 'detail', 'errors']) {
         final value = decoded[key];
-        if (value is String && value.trim().isNotEmpty) {
-          return value.trim();
-        }
-        if (value is List && value.isNotEmpty) {
-          return value.join(', ');
-        }
+        if (value is String && value.trim().isNotEmpty) return value.trim();
+        if (value is List && value.isNotEmpty) return value.join(', ');
       }
     }
-
     return null;
   }
 
-  User _parseUser(dynamic body) {
-    final data = _extractMap(body, ['user', 'data'], entityName: 'user');
-    final token = (body is Map<String, dynamic>)
-        ? (body['token'] ?? body['jwt'] ?? data['token'])
-        : data['token'];
+  // ── Data extraction helpers ────────────────────────────────────────────────
 
-    final userJson = Map<String, dynamic>.from(data);
-    userJson['token'] = token;
-
-    return User.fromJson(userJson);
+  void _assertMap(dynamic body, String context) {
+    if (body is! Map<String, dynamic>) {
+      throw Exception('Unexpected $context response format');
+    }
   }
 
   Map<String, dynamic> _extractMap(
@@ -340,30 +397,42 @@ class ApiService {
     if (body is Map<String, dynamic>) {
       for (final key in nestedKeys) {
         final nested = body[key];
-        if (nested is Map<String, dynamic>) {
-          return nested;
-        }
+        if (nested is Map<String, dynamic>) return nested;
       }
       return body;
     }
-
     throw Exception('Unexpected $entityName response format');
   }
 
   List<dynamic> _extractList(dynamic body, List<String> nestedKeys) {
-    if (body is List) {
-      return body;
-    }
-
+    if (body is List) return body;
     if (body is Map<String, dynamic>) {
       for (final key in nestedKeys) {
         final nested = body[key];
-        if (nested is List) {
-          return nested;
-        }
+        if (nested is List) return nested;
       }
     }
-
     return const [];
+  }
+
+  // ── ID / name derivation ───────────────────────────────────────────────────
+
+  /// Creates a stable, backend-compatible user ID from an email address.
+  ///
+  /// Example: `arjun.driver@mail.com` → `arjun_driver_mail_com`
+  static String _deriveUserId(String email) {
+    return email.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '_');
+  }
+
+  /// Derives a display name from the local part of an email address.
+  ///
+  /// Example: `arjun.driver@mail.com` → `Arjun Driver`
+  static String _deriveName(String email) {
+    final local = email.split('@').first;
+    return local
+        .split(RegExp(r'[._\-+]'))
+        .where((s) => s.isNotEmpty)
+        .map((s) => s[0].toUpperCase() + s.substring(1))
+        .join(' ');
   }
 }

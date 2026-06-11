@@ -20,7 +20,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final _passwordController = TextEditingController();
 
   bool _isLoading = false;
-  String _selectedRole = 'customer';
+  String _selectedRole = 'shipper';
 
   @override
   void dispose() {
@@ -224,10 +224,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
                             child: _RoleCard(
                               label: 'Customer',
                               icon: Icons.local_shipping_outlined,
-                              isSelected: _selectedRole == 'customer',
+                              isSelected: _selectedRole == 'shipper',
                               onTap: () {
                                 setState(() {
-                                  _selectedRole = 'customer';
+                                  _selectedRole = 'shipper';
                                 });
                               },
                             ),
