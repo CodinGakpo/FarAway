@@ -61,3 +61,29 @@ def get_current_user_profile(current_user: User = Depends(get_current_user)):
     Decodes the Bearer token (Firebase ID token or Local dev token) and returns the profile.
     """
     return current_user
+
+
+from pydantic import BaseModel
+
+class UserSyncRequest(BaseModel):
+    name: str
+    email: str
+    role: str
+
+@router.post("/sync", response_model=UserResponse)
+def sync_user_profile(
+    request: UserSyncRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Syncs the user's profile info (name, role) from the frontend (Firebase/Firestore) to the local Postgres database.
+    """
+    current_user.name = request.name
+    # Normalize role to driver or shipper
+    backend_role = "shipper" if request.role == "customer" else request.role
+    if backend_role in ["driver", "shipper"]:
+        current_user.role = backend_role
+    db.commit()
+    db.refresh(current_user)
+    return current_user

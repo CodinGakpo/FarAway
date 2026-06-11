@@ -7,6 +7,7 @@ class AppConstants {
   // Auth endpoints
   static const String AUTH_LOGIN = '/auth/login';
   static const String AUTH_ME = '/auth/me';
+  static const String AUTH_SYNC = '/auth/sync';
 
   // Domain endpoints (kept for non-auth screens)
   static const String TRIPS = '/trips';
