@@ -1,15 +1,22 @@
-import 'dart:convert';
-
 import 'package:flutter/foundation.dart';
+import 'package:firebase_auth/firebase_auth.dart' as fb_auth;
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../models/user.dart';
 import 'api_service.dart';
 
 class AuthProvider extends ChangeNotifier {
-  AuthProvider({ApiService? apiService})
-      : _apiService = apiService ?? ApiService();
+  AuthProvider({
+    ApiService? apiService,
+    fb_auth.FirebaseAuth? firebaseAuth,
+    FirebaseFirestore? firestore,
+  })  : _apiService = apiService ?? ApiService(),
+        _firebaseAuth = firebaseAuth ?? fb_auth.FirebaseAuth.instance,
+        _firestore = firestore ?? FirebaseFirestore.instance;
 
   final ApiService _apiService;
+  final fb_auth.FirebaseAuth _firebaseAuth;
+  final FirebaseFirestore _firestore;
 
   User? currentUser;
 
@@ -20,10 +27,61 @@ class AuthProvider extends ChangeNotifier {
   // ── Login / register / logout ──────────────────────────────────────────────
 
   Future<void> login(String email, String password) async {
-    final user = await _apiService.login(email, password);
-    await _apiService.saveToken(user.token);
-    currentUser = await _fetchFullProfile(user);
-    notifyListeners();
+    try {
+      final credential = await _firebaseAuth.signInWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
+
+      final fbUser = credential.user;
+      if (fbUser == null) {
+        throw Exception('Failed to sign in. User is null.');
+      }
+
+      // Fetch user profile from Firestore
+      final doc = await _firestore
+          .collection('users')
+          .doc(fbUser.uid)
+          .get()
+          .timeout(
+        const Duration(seconds: 10),
+        onTimeout: () => throw Exception(
+          'Firestore read timed out. Please check if Cloud Firestore is '
+          'enabled in your Firebase Console and the user database is initialized.',
+        ),
+      );
+      if (!doc.exists) {
+        throw Exception('User profile not found in Firestore.');
+      }
+
+      final data = doc.data()!;
+      final String name = data['name'] ?? '';
+      final String role = data['role'] ?? 'shipper';
+
+      final token = await fbUser.getIdToken() ?? '';
+      await _apiService.saveToken(token);
+
+      currentUser = User(
+        id: fbUser.uid,
+        email: email,
+        role: role,
+        name: name,
+        token: token,
+      );
+      notifyListeners();
+    } on fb_auth.FirebaseAuthException catch (e) {
+      String msg = e.message ?? 'An error occurred during login.';
+      if (e.code == 'user-not-found') {
+        msg = 'No user found for that email.';
+      } else if (e.code == 'wrong-password') {
+        msg = 'Wrong password provided for that user.';
+      } else if (e.code == 'invalid-credential') {
+        msg = 'Invalid credentials provided.';
+      }
+      throw Exception(msg);
+    } catch (e) {
+      throw Exception(e.toString());
+    }
   }
 
   Future<void> register(
@@ -32,13 +90,65 @@ class AuthProvider extends ChangeNotifier {
     String password,
     String role,
   ) async {
-    final user = await _apiService.register(name, email, password, role);
-    await _apiService.saveToken(user.token);
-    currentUser = await _fetchFullProfile(user);
-    notifyListeners();
+    try {
+      final credential = await _firebaseAuth.createUserWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
+
+      final fbUser = credential.user;
+      if (fbUser == null) {
+        throw Exception('Failed to create user. User is null.');
+      }
+
+      // Normalize role: customer -> shipper
+      final normalizedRole = (role == 'customer') ? 'shipper' : role;
+
+      // Save user profile to Firestore
+      await _firestore.collection('users').doc(fbUser.uid).set({
+        'uid': fbUser.uid,
+        'name': name,
+        'email': email,
+        'role': normalizedRole,
+        'createdAt': FieldValue.serverTimestamp(),
+      }).timeout(
+        const Duration(seconds: 10),
+        onTimeout: () => throw Exception(
+          'Firestore write timed out. Please check if Cloud Firestore is '
+          'enabled in your Firebase Console and security rules allow writes.',
+        ),
+      );
+
+      final token = await fbUser.getIdToken() ?? '';
+      await _apiService.saveToken(token);
+
+      currentUser = User(
+        id: fbUser.uid,
+        email: email,
+        role: normalizedRole,
+        name: name,
+        token: token,
+      );
+      notifyListeners();
+    } on fb_auth.FirebaseAuthException catch (e) {
+      String msg = e.message ?? 'An error occurred during registration.';
+      if (e.code == 'email-already-in-use') {
+        msg = 'The email address is already in use by another account.';
+      } else if (e.code == 'weak-password') {
+        msg = 'The password provided is too weak.';
+      }
+      throw Exception(msg);
+    } catch (e) {
+      throw Exception(e.toString());
+    }
   }
 
   Future<void> logout() async {
+    try {
+      await _firebaseAuth.signOut();
+    } catch (e) {
+      debugPrint('[AuthProvider] Firebase signOut failed: $e');
+    }
     await _apiService.clearToken();
     currentUser = null;
     notifyListeners();
@@ -47,86 +157,51 @@ class AuthProvider extends ChangeNotifier {
   // ── Session restoration on app start ──────────────────────────────────────
 
   /// Called once on app launch by [_AuthGate].
-  ///
-  /// Strategy:
-  /// 1. Read stored token from secure storage.
-  /// 2. Validate it by calling GET /auth/me.
-  /// 3. On 401 the token is stale: clear it and stay logged out.
-  /// 4. On network error, fall back to local JWT decoding so the app stays
-  ///    usable offline; the profile will be incomplete until reconnected.
   Future<void> tryAutoLogin() async {
-    debugPrint('[AuthProvider] tryAutoLogin — reading stored token');
-
-    final String? token;
-    try {
-      token = await _apiService.getToken();
-    } catch (e) {
-      debugPrint('[AuthProvider] tryAutoLogin — secure storage read failed: $e');
+    debugPrint('[AuthProvider] tryAutoLogin — checking Firebase current user');
+    final fbUser = _firebaseAuth.currentUser;
+    if (fbUser == null) {
+      debugPrint('[AuthProvider] tryAutoLogin — no active session in Firebase');
+      await _apiService.clearToken();
+      currentUser = null;
+      notifyListeners();
       return;
     }
 
-    if (token == null || token.isEmpty) {
-      debugPrint('[AuthProvider] tryAutoLogin — no stored token');
-      return;
-    }
-
-    debugPrint('[AuthProvider] tryAutoLogin — token found, calling /auth/me');
+    debugPrint('[AuthProvider] tryAutoLogin — session found: ${fbUser.uid}');
     try {
-      currentUser = await _apiService.getMe(token);
-      debugPrint(
-        '[AuthProvider] tryAutoLogin — restored: '
-        'id=${currentUser!.id}, role=${currentUser!.role}',
+      final token = await fbUser.getIdToken() ?? '';
+      await _apiService.saveToken(token);
+
+      final doc = await _firestore
+          .collection('users')
+          .doc(fbUser.uid)
+          .get()
+          .timeout(
+        const Duration(seconds: 10),
+        onTimeout: () => throw Exception('Firestore read timed out.'),
+      );
+      if (!doc.exists) {
+        throw Exception('User profile not found in Firestore.');
+      }
+
+      final data = doc.data()!;
+      final String name = data['name'] ?? '';
+      final String role = data['role'] ?? 'shipper';
+
+      currentUser = User(
+        id: fbUser.uid,
+        email: fbUser.email ?? '',
+        role: role,
+        name: name,
+        token: token,
       );
       notifyListeners();
-    } on UnauthorizedException {
-      // Token is expired or revoked — force re-login.
-      debugPrint('[AuthProvider] tryAutoLogin — 401, clearing stored token');
-      await _apiService.clearToken();
     } catch (e) {
-      // Network error or server unreachable — restore a minimal session from
-      // the token's own claims so the user can still see the UI offline.
-      debugPrint('[AuthProvider] tryAutoLogin — /auth/me failed ($e), falling back to JWT decode');
-      final role = _roleFromToken(token);
-      if (role != null) {
-        currentUser = User(id: '', email: '', role: role, name: '', token: token);
-        notifyListeners();
-      }
+      debugPrint('[AuthProvider] tryAutoLogin — failed to restore session: $e');
+      await _apiService.clearToken();
+      currentUser = null;
+      notifyListeners();
     }
-  }
-
-  // ── Helpers ────────────────────────────────────────────────────────────────
-
-  /// Enriches [partialUser] with the full profile from GET /auth/me.
-  /// Returns [partialUser] unchanged if the call fails (e.g. brief outage).
-  Future<User> _fetchFullProfile(User partialUser) async {
-    try {
-      return await _apiService.getMe(partialUser.token);
-    } catch (_) {
-      return partialUser;
-    }
-  }
-
-  /// Decodes the JWT payload and extracts the `role` claim.
-  ///
-  /// Returns `null` if the token is malformed or carries an unknown role.
-  /// Valid backend roles are `'driver'` and `'shipper'`.
-  String? _roleFromToken(String token) {
-    try {
-      final parts = token.split('.');
-      if (parts.length != 3) return null;
-
-      // base64Url.normalize handles missing padding characters.
-      final normalized = base64Url.normalize(parts[1]);
-      final payload = utf8.decode(base64Url.decode(normalized));
-      final decoded = jsonDecode(payload);
-
-      if (decoded is Map<String, dynamic>) {
-        final role = decoded['role'];
-        if (role == 'driver' || role == 'shipper') return role as String;
-      }
-    } catch (_) {
-      // Malformed token — return null.
-    }
-    return null;
   }
 }

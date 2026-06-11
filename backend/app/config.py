@@ -10,7 +10,7 @@ DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localho
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
 
 # Firebase configurations
-FIREBASE_PROJECT_ID = os.getenv("FIREBASE_PROJECT_ID", "freightshare-prod")
+FIREBASE_PROJECT_ID = os.getenv("FIREBASE_PROJECT_ID", "faraway-f005b")
 LOCAL_DEV_MODE = os.getenv("LOCAL_DEV_MODE", "true").lower() == "true"
 
 # Fallback JWT Authentication

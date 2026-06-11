@@ -122,16 +122,47 @@ class ApiService {
   /// Uses [token] directly so this can be called before the token is
   /// stored (e.g. to validate it on app startup).
   Future<User> getMe(String token) async {
-    final response = await _client.get(
-      _buildUri(AppConstants.AUTH_ME),
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer $token',
+    try {
+      final response = await _client.get(
+        _buildUri(AppConstants.AUTH_ME),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
+
+      return _handleResponse(response, (body) {
+        _assertMap(body, '/auth/me');
+        return User.fromMeResponse(
+          body as Map<String, dynamic>,
+          token: token,
+        );
+      });
+    } catch (e) {
+      throw _handleNetworkError(e);
+    }
+  }
+
+  /// Syncs the authenticated user's profile info (name, email, role) with the backend.
+  Future<User> syncUser({
+    required String name,
+    required String email,
+    required String role,
+  }) async {
+    final backendRole = (role == 'customer') ? 'shipper' : role;
+    final token = await getToken() ?? '';
+
+    final response = await _post(
+      AppConstants.AUTH_SYNC,
+      {
+        'name': name,
+        'email': email,
+        'role': backendRole,
       },
     );
 
     return _handleResponse(response, (body) {
-      _assertMap(body, '/auth/me');
+      _assertMap(body, 'syncUser');
       return User.fromMeResponse(
         body as Map<String, dynamic>,
         token: token,
@@ -296,26 +327,54 @@ class ApiService {
   // ── HTTP helpers ───────────────────────────────────────────────────────────
 
   Future<http.Response> _get(String path) async {
-    return _client.get(
-      _buildUri(path),
-      headers: await _headers(),
-    );
+    try {
+      return await _client.get(
+        _buildUri(path),
+        headers: await _headers(),
+      );
+    } catch (e) {
+      throw _handleNetworkError(e);
+    }
   }
 
   Future<http.Response> _post(String path, Map<String, dynamic> body) async {
-    return _client.post(
-      _buildUri(path),
-      headers: await _headers(),
-      body: jsonEncode(body),
-    );
+    try {
+      return await _client.post(
+        _buildUri(path),
+        headers: await _headers(),
+        body: jsonEncode(body),
+      );
+    } catch (e) {
+      throw _handleNetworkError(e);
+    }
   }
 
   Future<http.Response> _patch(String path, Map<String, dynamic> body) async {
-    return _client.patch(
-      _buildUri(path),
-      headers: await _headers(),
-      body: jsonEncode(body),
-    );
+    try {
+      return await _client.patch(
+        _buildUri(path),
+        headers: await _headers(),
+        body: jsonEncode(body),
+      );
+    } catch (e) {
+      throw _handleNetworkError(e);
+    }
+  }
+
+  Exception _handleNetworkError(dynamic error) {
+    final errorStr = error.toString().toLowerCase();
+    if (errorStr.contains('socketexception') ||
+        errorStr.contains('connection refused') ||
+        errorStr.contains('failed host lookup') ||
+        errorStr.contains('connection closed before full header')) {
+      return Exception(
+        'Unable to connect to the backend server. Please verify:\n'
+        '1. The backend server is running.\n'
+        '2. The BASE_URL in your .env file is configured correctly.\n'
+        '   (Note: Use http://10.0.2.2:8000 for Android Emulator instead of localhost).'
+      );
+    }
+    return Exception('Connection error: $error');
   }
 
   Future<Map<String, String>> _headers() async {

@@ -118,7 +118,13 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
                 email = f"{token}@mock.com"
                 role = "driver" if "driver" in token else "shipper"
             else:
-                raise credentials_exception
+                try:
+                    claims = verify_firebase_token(token)
+                    user_id = claims.get("user_id") or claims.get("uid") or claims.get("sub")
+                    email = claims.get("email")
+                    role = claims.get("role")
+                except Exception:
+                    raise credentials_exception
     else:
         # Production mode: Validate Firebase ID Token
         claims = verify_firebase_token(token)

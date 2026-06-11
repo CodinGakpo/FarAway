@@ -50,8 +50,11 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
       if (!mounted) {
         return;
       }
+      final errorMsg = error.toString().replaceFirst('Exception: ', '');
+      debugPrint('[DriverHomeScreen] Silent active trip load connection warning: $errorMsg');
       setState(() {
-        _errorMessage = error.toString().replaceFirst('Exception: ', '');
+        _activeTrip = null;
+        _errorMessage = null;
       });
     } finally {
       if (mounted) {
