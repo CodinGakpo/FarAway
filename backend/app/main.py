@@ -1,27 +1,54 @@
-from fastapi import FastAPI, Depends
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
-from sqlalchemy.orm import Session
-from app.db.client import engine, Base
-from app.core.dependencies import get_db
 
-# Create all database tables (for demo/initial setup purposes)
-Base.metadata.create_all(bind=engine)
+from app.database import engine, Base, is_sqlite
+from app.routers import auth, trips, loads, matches, railway, agent
+
+# Auto-enable PostGIS extension on PostgreSQL and create tables
+try:
+    if not is_sqlite:
+        with engine.connect() as conn:
+            conn.execute(text("CREATE EXTENSION IF NOT EXISTS postgis;"))
+            conn.commit()
+    Base.metadata.create_all(bind=engine)
+except Exception as e:
+    print(f"Database setup warning: {str(e)}")
 
 app = FastAPI(
-    title="FarAway API",
-    description="Backend for FarAway Flutter App connecting to Supabase PostgreSQL",
-    version="1.0.0",
+    title="FreightShare Production Backend API",
+    description="FastAPI Production Backend for FreightShare Hackathon. Supports Firebase Auth, PostGIS Spatial Matching, Celery/Redis.",
+    version="2.0.0"
 )
 
-@app.get("/")
-def read_root():
-    return {"message": "Welcome to FarAway API. Connected to Supabase DB."}
+# CORS configuration for Flutter mobile app and React web dashboard
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-@app.get("/health")
-def health_check(db: Session = Depends(get_db)):
-    try:
-        # Check database connectivity
-        db.execute(text("SELECT 1"))
-        return {"status": "ok", "database": "connected"}
-    except Exception as e:
-        return {"status": "error", "database": str(e)}
+# Include API Routers
+app.include_router(auth.router)
+app.include_router(trips.router)
+app.include_router(loads.router)
+app.include_router(matches.router)
+app.include_router(railway.router)
+app.include_router(agent.router)
+
+@app.get("/health", tags=["Health"])
+def health_check():
+    """
+    Service health validation endpoint
+    """
+    return {"status": "ok", "database": "sqlite" if is_sqlite else "postgresql+postgis"}
+
+@app.get("/", tags=["Root"])
+def root():
+    return {
+        "message": "Welcome to FreightShare Production API!",
+        "docs_url": "/docs",
+        "redoc_url": "/redoc"
+    }

@@ -1,3 +1,25 @@
+# Virtual environments
+backend/venv/
+backend/ENV/
+backend/env/
+venv/
+env/
+
+# Byte-compiled
+**/__pycache__/
+**/*.pyc
+
+# Env config
+backend/.env
 .env
-venv
-*.txt
+
+# Databases
+backend/*.db
+backend/*.sqlite
+*.db
+*.sqlite
+
+# IDEs
+.vscode/
+.idea/
+.DS_Store
