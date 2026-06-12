@@ -14,7 +14,11 @@ class TripRow:
     max_detour_min: float
     status: str
     departure_at: datetime
+    base_duration_min: float
+    origin_point: tuple
+    destination_point: tuple
     dist_pickup_km: Optional[float] = None
+
     dist_dropoff_km: Optional[float] = None
 
 class TripRepository:
