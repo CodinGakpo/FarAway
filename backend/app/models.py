@@ -4,7 +4,7 @@ from geoalchemy2 import Geometry
 from app.database import Base, is_sqlite
 
 class User(Base):
-    __tablename__ = "users"
+    __tablename__ = "legacy_users"
 
     id = Column(String, primary_key=True, index=True) # Firebase Auth UID (String)
     email = Column(String, unique=True, index=True, nullable=False)
@@ -19,10 +19,10 @@ class User(Base):
 
 
 class Trip(Base):
-    __tablename__ = "trips"
+    __tablename__ = "legacy_trips"
 
     id = Column(Integer, primary_key=True, index=True)
-    driver_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    driver_id = Column(String, ForeignKey("legacy_users.id", ondelete="CASCADE"), nullable=False)
     origin_name = Column(String, nullable=False)
     destination_name = Column(String, nullable=False)
     departure_time = Column(DateTime, nullable=False)
@@ -43,10 +43,10 @@ class Trip(Base):
 
 
 class Load(Base):
-    __tablename__ = "loads"
+    __tablename__ = "legacy_loads"
 
     id = Column(Integer, primary_key=True, index=True)
-    shipper_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    shipper_id = Column(String, ForeignKey("legacy_users.id", ondelete="CASCADE"), nullable=False)
     pickup_name = Column(String, nullable=False)
     dropoff_name = Column(String, nullable=False)
     weight = Column(Float, nullable=False)
@@ -64,7 +64,7 @@ class Load(Base):
 
 
 class TrainSchedule(Base):
-    __tablename__ = "train_schedules"
+    __tablename__ = "legacy_train_schedules"
 
     id = Column(Integer, primary_key=True, index=True)
     train_number = Column(String, unique=True, index=True, nullable=False)
@@ -82,14 +82,14 @@ class TrainSchedule(Base):
 
 
 class Match(Base):
-    __tablename__ = "matches"
+    __tablename__ = "legacy_matches"
 
     id = Column(Integer, primary_key=True, index=True)
-    load_id = Column(Integer, ForeignKey("loads.id", ondelete="CASCADE"), nullable=False)
+    load_id = Column(Integer, ForeignKey("legacy_loads.id", ondelete="CASCADE"), nullable=False)
     
     # Matches can be either truck (trip) OR train!
-    trip_id = Column(Integer, ForeignKey("trips.id", ondelete="CASCADE"), nullable=True)
-    train_schedule_id = Column(Integer, ForeignKey("train_schedules.id", ondelete="CASCADE"), nullable=True)
+    trip_id = Column(Integer, ForeignKey("legacy_trips.id", ondelete="CASCADE"), nullable=True)
+    train_schedule_id = Column(Integer, ForeignKey("legacy_train_schedules.id", ondelete="CASCADE"), nullable=True)
     
     score = Column(Float, default=1.0)  # Overlap rating/score
     status = Column(String, default="PROPOSED")  # "PROPOSED", "ACCEPTED", "REJECTED"
@@ -104,10 +104,10 @@ class Match(Base):
 
 
 class Rating(Base):
-    __tablename__ = "ratings"
+    __tablename__ = "legacy_ratings"
 
     id = Column(Integer, primary_key=True, index=True)
-    match_id = Column(Integer, ForeignKey("matches.id", ondelete="CASCADE"), nullable=False)
+    match_id = Column(Integer, ForeignKey("legacy_matches.id", ondelete="CASCADE"), nullable=False)
     score = Column(Integer, nullable=False)  # 1 to 5 stars
     comment = Column(Text, nullable=True)
     created_at = Column(DateTime, server_default=func.now())

@@ -56,7 +56,7 @@ def make_load_response(load: Load, db: Session) -> LoadResponse:
         dropoff_lng=d_lng
     )
 
-@router.post("/", response_model=LoadResponse, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=LoadResponse, status_code=status.HTTP_201_CREATED)
 def create_load(
     load_in: LoadCreate, 
     db: Session = Depends(get_db), 
@@ -96,7 +96,7 @@ def create_load(
     return make_load_response(db_load, db)
 
 
-@router.get("/", response_model=List[LoadResponse])
+@router.get("", response_model=List[LoadResponse])
 def list_loads(
     shipper_id: Optional[str] = None,
     status: Optional[str] = None,

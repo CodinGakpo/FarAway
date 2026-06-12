@@ -31,6 +31,8 @@ CITY_COORDINATES: Dict[str, Tuple[float, float]] = {
     "turbhe midc": (19.0878, 73.0143),
     "bhiwandi": (19.3001, 73.0637),
     "panvel": (18.9894, 73.1175),
+    "delhi": (28.6139, 77.2090),
+    "dehradun": (30.3165, 78.0322),
 }
 
 class GeoService:

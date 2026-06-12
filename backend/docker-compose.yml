@@ -44,7 +44,7 @@ services:
       - REDIS_URL=redis://redis:6379/0
       - JWT_SECRET=428f5efd28e7bb7f9bdfa95c3453a2ef9b1fbf4148b3b64cfc418721c0ad5d45
       - JWT_ALGORITHM=HS256
-      - FIREBASE_PROJECT_ID=freightshare-prod
+      - FIREBASE_PROJECT_ID=faraway-f005b
       - LOCAL_DEV_MODE=true
     depends_on:
       db:
@@ -63,7 +63,7 @@ services:
       - REDIS_URL=redis://redis:6379/0
       - JWT_SECRET=428f5efd28e7bb7f9bdfa95c3453a2ef9b1fbf4148b3b64cfc418721c0ad5d45
       - JWT_ALGORITHM=HS256
-      - FIREBASE_PROJECT_ID=freightshare-prod
+      - FIREBASE_PROJECT_ID=faraway-f005b
       - LOCAL_DEV_MODE=true
     depends_on:
       db:
