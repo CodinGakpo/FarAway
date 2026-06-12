@@ -37,7 +37,6 @@ def mock_login_for_dev(request: LocalLoginRequest, db: Session = Depends(get_db)
         )
         db.add(user)
     else:
-        user.role = request.role
         user.email = request.email
     db.commit()
     db.refresh(user)
