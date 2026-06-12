@@ -61,6 +61,12 @@ class AuthProvider extends ChangeNotifier {
       final token = await fbUser.getIdToken() ?? '';
       await _apiService.saveToken(token);
 
+      await _apiService.syncUser(
+        name: name,
+        email: email,
+        role: role,
+      );
+
       currentUser = User(
         id: fbUser.uid,
         email: email,
@@ -121,6 +127,12 @@ class AuthProvider extends ChangeNotifier {
 
       final token = await fbUser.getIdToken() ?? '';
       await _apiService.saveToken(token);
+
+      await _apiService.syncUser(
+        name: name,
+        email: email,
+        role: normalizedRole,
+      );
 
       currentUser = User(
         id: fbUser.uid,
@@ -188,6 +200,12 @@ class AuthProvider extends ChangeNotifier {
       final data = doc.data()!;
       final String name = data['name'] ?? '';
       final String role = data['role'] ?? 'shipper';
+
+      await _apiService.syncUser(
+        name: name,
+        email: fbUser.email ?? '',
+        role: role,
+      );
 
       currentUser = User(
         id: fbUser.uid,

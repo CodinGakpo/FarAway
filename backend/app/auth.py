@@ -21,7 +21,7 @@ from app.schemas import TokenData
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login", auto_error=False)
 
 # Cache for Google public certificates (to avoid fetching on every request)
-GOOGLE_CERTS_URL = "https://www.googleapis.com/robot/v1/metadata/x509/securetoken-system@system.gserviceaccount.com"
+GOOGLE_CERTS_URL = "https://www.googleapis.com/robot/v1/metadata/x509/securetoken@system.gserviceaccount.com"
 certs_cache: Dict[str, str] = {}
 certs_cache_expiry: datetime = datetime.min
 
@@ -113,18 +113,15 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
         except JWTError:
             # Fallback: support passing user ID directly as the token in mock testing
             # e.g. "driver_user_1" or "shipper_user_2"
-            if "_" in token:
+            if "_" in token and "." not in token and len(token) < 50:
                 user_id = token
                 email = f"{token}@mock.com"
                 role = "driver" if "driver" in token else "shipper"
             else:
-                try:
-                    claims = verify_firebase_token(token)
-                    user_id = claims.get("user_id") or claims.get("uid") or claims.get("sub")
-                    email = claims.get("email")
-                    role = claims.get("role")
-                except Exception:
-                    raise credentials_exception
+                claims = verify_firebase_token(token)
+                user_id = claims.get("user_id") or claims.get("uid") or claims.get("sub")
+                email = claims.get("email")
+                role = claims.get("role")
     else:
         # Production mode: Validate Firebase ID Token
         claims = verify_firebase_token(token)

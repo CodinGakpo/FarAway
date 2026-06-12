@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../services/auth_provider.dart';
 import 'auth/login_screen.dart';
+import 'create_shipment_screen.dart';
 
 class CustomerHomeScreen extends StatelessWidget {
   const CustomerHomeScreen({super.key});
@@ -152,6 +153,31 @@ class CustomerHomeScreen extends StatelessWidget {
                   style: OutlinedButton.styleFrom(
                     foregroundColor: Colors.red.shade600,
                     side: BorderSide(color: Colors.red.shade400, width: 1.5),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              SizedBox(
+                height: 52,
+                child: ElevatedButton.icon(
+                  onPressed: () {
+                    Navigator.of(context).push(MaterialPageRoute(
+                        builder: (_) => const CreateShipmentScreen()));
+                  },
+                  icon: const Icon(Icons.rocket_launch, size: 20),
+                  label: const Text(
+                    'Test AI Agent Flow',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF1D9E75),
+                    foregroundColor: Colors.white,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(14),
                     ),

@@ -16,6 +16,8 @@ CITY_COORDINATES: Dict[str, Tuple[float, float]] = {
     "madurai": (9.9252, 78.1198),
     "trichy": (10.7905, 78.7047),
     "salem": (11.6643, 78.1460),
+    "delhi": (28.6139, 77.2090),
+    "dehradun": (30.3165, 78.0322),
 }
 
 class GeoService:

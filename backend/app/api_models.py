@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field, UUID4
+from pydantic import BaseModel, Field
 from typing import Optional
 from datetime import datetime
 
@@ -16,13 +16,13 @@ class ErrorResponse(BaseModel):
 # ── Tool 1: Analyze Route ─────────────────────────────────
 
 class AnalyzeRouteRequest(BaseModel):
-    trip_id: UUID4
+    trip_id: str
     pickup: GeoPoint
     dropoff: GeoPoint
 
 class AnalyzeRouteResponse(BaseModel):
     feasible: bool
-    trip_id: UUID4
+    trip_id: str
     detour_distance_km: float = 0.0
     detour_duration_min: float = 0.0
     detour_percentage: float = 0.0
@@ -32,7 +32,7 @@ class AnalyzeRouteResponse(BaseModel):
 # ── Tool 2: Check Capacity ────────────────────────────────
 
 class CheckCapacityRequest(BaseModel):
-    trip_id: UUID4
+    trip_id: str
     weight_kg: float = Field(..., gt=0)
     volume_m3: float = Field(..., gt=0)
 
@@ -46,7 +46,7 @@ class CheckCapacityResponse(BaseModel):
 # ── Tool 3: Calculate Price ───────────────────────────────
 
 class CalculatePriceRequest(BaseModel):
-    trip_id: UUID4
+    trip_id: str
     shipment_distance_km: float = Field(..., gt=0)
     weight_kg: float = Field(..., gt=0)
     volume_m3: float = Field(..., gt=0)
@@ -77,8 +77,8 @@ class CalculatePriceResponse(BaseModel):
 # ── Tool 4: Hold Capacity ─────────────────────────────────
 
 class HoldCapacityRequest(BaseModel):
-    trip_id: UUID4
-    shipment_id: UUID4
+    trip_id: str
+    shipment_id: str
     weight_kg: float = Field(..., gt=0)
     volume_m3: float = Field(..., gt=0)
     price_amount: float = Field(..., gt=0)
@@ -88,14 +88,14 @@ class HoldCapacityRequest(BaseModel):
 
 class HoldCapacityResponse(BaseModel):
     success: bool
-    booking_id: Optional[UUID4] = None
+    booking_id: Optional[str] = None
     hold_expires_at: Optional[datetime] = None
     rejection_reason: Optional[str] = None
 
 # ── Tool 5: Confirm Booking ───────────────────────────────
 
 class ConfirmBookingRequest(BaseModel):
-    booking_id: UUID4
+    booking_id: str
 
 class ConfirmBookingResponse(BaseModel):
     success: bool
@@ -112,7 +112,7 @@ class FindTripsRequest(BaseModel):
     limit: int = Field(default=10, le=50)
 
 class TripSummary(BaseModel):
-    trip_id: UUID4
+    trip_id: str
     departure_at: datetime
     base_distance_km: float
     max_detour_km: float

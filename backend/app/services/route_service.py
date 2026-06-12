@@ -31,10 +31,10 @@ class RouteService:
             repo = TripRepository(conn)
             trip = await repo.get_by_id(trip_id)
 
-        if not trip or trip.status != 'scheduled':
+        if not trip or trip.status not in ('scheduled', 'ACTIVE'):
             return RouteAnalysisResult(
                 feasible=False, trip_id=trip_id,
-                rejection_reason="Trip not found or not scheduled"
+                rejection_reason="Trip not found or not scheduled/active"
             )
 
         # PostGIS pre-filter (cheap, no external API call)
@@ -60,8 +60,8 @@ class RouteService:
                 destination=trip.destination_point,
             )
 
-        detour_km = new_dist_km - trip.base_distance_km
-        detour_min = new_dur_min - trip.base_duration_min
+        detour_km = max(0.0, new_dist_km - trip.base_distance_km)
+        detour_min = max(0.0, new_dur_min - trip.base_duration_min)
 
         if detour_km > trip.max_detour_km:
             return RouteAnalysisResult(
@@ -92,20 +92,20 @@ class RouteService:
         async with self.db.acquire() as conn:
             row = await conn.fetchrow("""
                 SELECT
-                    ST_DWithin(route_polyline,
+                    ST_DWithin(route_geometry,
                         ST_MakePoint($2, $1)::geography, $5 * 1000) AS pickup_near,
-                    ST_DWithin(route_polyline,
+                    ST_DWithin(route_geometry,
                         ST_MakePoint($4, $3)::geography, $5 * 1000) AS dropoff_near,
                     ST_LineLocatePoint(
-                        ST_Transform(route_polyline::geometry, 3857),
-                        ST_Transform(ST_MakePoint($2, $1)::geometry, 3857)
+                        ST_Transform(ST_SetSRID(route_geometry::geometry, 4326), 3857),
+                        ST_Transform(ST_SetSRID(ST_MakePoint($2, $1)::geometry, 4326), 3857)
                     ) AS pickup_pos,
                     ST_LineLocatePoint(
-                        ST_Transform(route_polyline::geometry, 3857),
-                        ST_Transform(ST_MakePoint($4, $3)::geometry, 3857)
+                        ST_Transform(ST_SetSRID(route_geometry::geometry, 4326), 3857),
+                        ST_Transform(ST_SetSRID(ST_MakePoint($4, $3)::geometry, 4326), 3857)
                     ) AS dropoff_pos
-                FROM trips WHERE id = $6
-            """, pu_lat, pu_lng, do_lat, do_lng, trip.max_detour_km, trip.id)
+                FROM legacy_trips WHERE id = $6::int
+            """, pu_lat, pu_lng, do_lat, do_lng, trip.max_detour_km, int(trip.id))
 
         if not row['pickup_near']:
             return {'ok': False, 'reason': 'Pickup point too far from route'}

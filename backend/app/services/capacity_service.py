@@ -33,15 +33,13 @@ class CapacityService:
         async with self.db.acquire() as conn:
             row = await conn.fetchrow("""
                 SELECT
-                    tr.max_weight_kg,
-                    tr.max_volume_m3,
-                    tc.used_weight_kg,
-                    tc.used_volume_m3
-                FROM trip_capacity tc
-                JOIN trips t   ON t.id = tc.trip_id
-                JOIN trucks tr ON tr.id = t.truck_id
-                WHERE tc.trip_id = $1
-            """, trip_id)
+                    t.max_weight_capacity as max_weight_kg,
+                    t.max_volume_capacity as max_volume_m3,
+                    (t.max_weight_capacity - t.remaining_weight_capacity) as used_weight_kg,
+                    (t.max_volume_capacity - t.remaining_volume_capacity) as used_volume_m3
+                FROM legacy_trips t
+                WHERE t.id = $1::int
+            """, int(trip_id))
 
         if not row:
             return CapacityCheckResult(
@@ -97,14 +95,16 @@ class CapacityService:
             async with conn.transaction(isolation='serializable'):
                 # Step 1+2: Lock and re-validate inside transaction
                 cap_row = await conn.fetchrow("""
-                    SELECT tc.used_weight_kg, tc.used_volume_m3, tc.version,
-                           tr.max_weight_kg, tr.max_volume_m3
-                    FROM trip_capacity tc
-                    JOIN trips t   ON t.id = tc.trip_id
-                    JOIN trucks tr ON tr.id = t.truck_id
-                    WHERE tc.trip_id = $1
+                    SELECT 
+                        t.max_weight_capacity as max_weight_kg, 
+                        t.max_volume_capacity as max_volume_m3,
+                        (t.max_weight_capacity - t.remaining_weight_capacity) as used_weight_kg,
+                        (t.max_volume_capacity - t.remaining_volume_capacity) as used_volume_m3,
+                        1 as version
+                    FROM legacy_trips t
+                    WHERE t.id = $1::int
                     FOR UPDATE
-                """, trip_id)
+                """, int(trip_id))
 
                 if not cap_row:
                     return CapacityHoldResult(success=False, booking_id=None,
@@ -120,13 +120,11 @@ class CapacityService:
 
                 # Step 3: Update capacity
                 updated = await conn.execute("""
-                    UPDATE trip_capacity
-                    SET used_weight_kg = used_weight_kg + $2,
-                        used_volume_m3  = used_volume_m3  + $3,
-                        version = version + 1,
-                        updated_at = NOW()
-                    WHERE trip_id = $1 AND version = $4
-                """, trip_id, weight_kg, volume_m3, cap_row['version'])
+                    UPDATE legacy_trips
+                    SET remaining_weight_capacity = remaining_weight_capacity - $2,
+                        remaining_volume_capacity = remaining_volume_capacity - $3
+                    WHERE id = $1::int
+                """, int(trip_id), weight_kg, volume_m3)
 
                 if updated == "UPDATE 0":
                     raise CapacityConflictError("Concurrent capacity update detected")
@@ -195,10 +193,9 @@ class CapacityService:
                     UPDATE bookings SET status = $2, updated_at = NOW() WHERE id = $1
                 """, booking_id, reason)
                 await conn.execute("""
-                    UPDATE trip_capacity
-                    SET used_weight_kg = GREATEST(0, used_weight_kg - $2),
-                        used_volume_m3  = GREATEST(0, used_volume_m3  - $3),
-                        version = version + 1, updated_at = NOW()
-                    WHERE trip_id = $1
-                """, row['trip_id'], row['weight_kg'], row['volume_m3'])
+                    UPDATE legacy_trips
+                    SET remaining_weight_capacity = LEAST(max_weight_capacity, remaining_weight_capacity + $2),
+                        remaining_volume_capacity  = LEAST(max_volume_capacity, remaining_volume_capacity + $3)
+                    WHERE id = $1::int
+                """, int(row['trip_id']), row['weight_kg'], row['volume_m3'])
         return True
