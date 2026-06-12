@@ -18,18 +18,6 @@ services:
       timeout: 5s
       retries: 5
 
-  redis:
-    image: redis:7-alpine
-    container_name: freightshare-redis
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis_data:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
 
   web:
     build: .
@@ -41,36 +29,18 @@ services:
       - "8000:8000"
     environment:
       - DATABASE_URL=postgresql://postgres:postgres@db:5432/freightshare
-      - REDIS_URL=redis://redis:6379/0
+
       - JWT_SECRET=428f5efd28e7bb7f9bdfa95c3453a2ef9b1fbf4148b3b64cfc418721c0ad5d45
       - JWT_ALGORITHM=HS256
-      - FIREBASE_PROJECT_ID=freightshare-prod
+      - FIREBASE_PROJECT_ID=faraway-f005b
       - LOCAL_DEV_MODE=true
     depends_on:
       db:
-        condition: service_healthy
-      redis:
         condition: service_healthy
 
-  worker:
-    build: .
-    container_name: freightshare-worker
-    command: celery -A app.worker.celery_app worker --loglevel=info
-    volumes:
-      - .:/code
-    environment:
-      - DATABASE_URL=postgresql://postgres:postgres@db:5432/freightshare
-      - REDIS_URL=redis://redis:6379/0
-      - JWT_SECRET=428f5efd28e7bb7f9bdfa95c3453a2ef9b1fbf4148b3b64cfc418721c0ad5d45
-      - JWT_ALGORITHM=HS256
-      - FIREBASE_PROJECT_ID=freightshare-prod
-      - LOCAL_DEV_MODE=true
-    depends_on:
-      db:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
+
+
 
 volumes:
   postgres_data:
-  redis_data:
+

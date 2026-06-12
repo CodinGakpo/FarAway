@@ -23,3 +23,6 @@ backend/*.sqlite
 .vscode/
 .idea/
 .DS_Store
+
+
+adidev_backend_plan.md

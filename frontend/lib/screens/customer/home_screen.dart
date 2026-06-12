@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../core/app_theme.dart';
 import '../../models/location_point.dart';
+import '../../models/booking.dart';
 import '../../providers/booking_provider.dart';
 import '../../providers/shipment_provider.dart';
 
@@ -187,9 +188,10 @@ class _HomeScreenState extends State<HomeScreen> {
 
 // ──────────────────────────────────────────────────────────────────────────────
 
+
 class _ActiveBanner extends StatelessWidget {
   const _ActiveBanner({required this.booking, required this.onTap});
-  final dynamic booking;
+  final Booking booking;
   final VoidCallback onTap;
 
   @override

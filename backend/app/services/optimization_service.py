@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import text
 
 from app.database import is_sqlite
-from app.models import Trip, Load, Match
+from app.models import Trip, Shipment
 from app.services.geo_service import GeoService
 
 logger = logging.getLogger(__name__)
@@ -63,32 +63,7 @@ def parse_linestring_wkt(wkt_str: str) -> List[List[float]]:
 
 
 class OptimizationService:
-    @staticmethod
-    def get_load_coords(load: Load, db: Session) -> Tuple[float, float, float, float]:
-        """
-        Retrieves the (pickup_lat, pickup_lng, dropoff_lat, dropoff_lng) for a Load,
-        supporting both PostGIS on Postgres and WKT strings on SQLite.
-        """
-        if is_sqlite:
-            p_lat, p_lng = parse_point_wkt(load.pickup_geometry)
-            d_lat, d_lng = parse_point_wkt(load.dropoff_geometry)
-            if p_lat == 0.0 and p_lng == 0.0:
-                p_lat, p_lng = 12.9165, 79.1325
-            if d_lat == 0.0 and d_lng == 0.0:
-                d_lat, d_lng = 12.9716, 77.5946
-            return p_lat, p_lng, d_lat, d_lng
-        else:
-            query = text("""
-                SELECT ST_Y(pickup_geometry) as p_lat, 
-                       ST_X(pickup_geometry) as p_lng, 
-                       ST_Y(dropoff_geometry) as d_lat, 
-                       ST_X(dropoff_geometry) as d_lng 
-                FROM loads WHERE id = :id
-            """)
-            res = db.execute(query, {"id": load.id}).fetchone()
-            if res:
-                return res[0], res[1], res[2], res[3]
-            return 0.0, 0.0, 0.0, 0.0
+
 
     @staticmethod
     def get_trip_coords(trip: Trip, db: Session) -> List[List[float]]:
@@ -159,64 +134,54 @@ class OptimizationService:
         trace_steps.append(f"🛣️ Base Route Distance: {base_distance:.2f} km")
         trace_steps.append(f"📦 Trip Baseline Capacities: Remaining Weight={trip.remaining_weight_capacity}kg, Remaining Volume={trip.remaining_volume_capacity} cu ft")
 
-        # 2. Query Candidate Loads (proposed matches for this trip)
-        matches = db.query(Match).filter(Match.trip_id == trip.id, Match.status == "PROPOSED").all()
+        # 2. Query Candidate Shipments (pending shipments for this trip)
+        shipments = db.query(Shipment).filter(Shipment.trip_id == trip.id, Shipment.status == "PENDING").all()
         candidate_loads = []
         rejected_loads_details = []
 
-        for m in matches:
-            load = m.load
-            if not load:
-                continue
-            
-            p_lat, p_lng, d_lat, d_lng = cls.get_load_coords(load, db)
+        for shipment in shipments:
+            # We treat a shipment as a "load" for the optimizer
+            p_lat, p_lng = GeoService.get_city_coords(shipment.pickup_location)
+            d_lat, d_lng = GeoService.get_city_coords(shipment.dropoff_location)
             
             # Simple capacity preprocessing
-            if load.weight > trip.remaining_weight_capacity:
+            if shipment.weight > trip.remaining_weight_capacity:
                 rejected_loads_details.append({
-                    "load_id": load.id,
-                    "pickup_name": load.pickup_name,
-                    "dropoff_name": load.dropoff_name,
-                    "weight": load.weight,
-                    "volume": load.volume,
-                    "price": m.score * 2000.0, # Estimate price if missing, or use DB price
-                    "reason": f"Exceeds remaining weight capacity (Requires: {load.weight}kg, Available: {trip.remaining_weight_capacity}kg)"
+                    "load_id": shipment.id,
+                    "pickup_name": shipment.pickup_location,
+                    "dropoff_name": shipment.dropoff_location,
+                    "weight": shipment.weight,
+                    "volume": shipment.volume,
+                    "price": shipment.price,
+                    "reason": f"Exceeds remaining weight capacity (Requires: {shipment.weight}kg, Available: {trip.remaining_weight_capacity}kg)"
                 })
-                trace_steps.append(f"⚠️ Pre-rejected Load ID {load.id} ({load.pickup_name} -> {load.dropoff_name}) because it exceeds remaining weight capacity.")
+                trace_steps.append(f"⚠️ Pre-rejected Shipment ID {shipment.id} ({shipment.pickup_location} -> {shipment.dropoff_location}) because it exceeds remaining weight capacity.")
                 continue
                 
-            if load.volume > trip.remaining_volume_capacity:
+            if shipment.volume > trip.remaining_volume_capacity:
                 rejected_loads_details.append({
-                    "load_id": load.id,
-                    "pickup_name": load.pickup_name,
-                    "dropoff_name": load.dropoff_name,
-                    "weight": load.weight,
-                    "volume": load.volume,
-                    "price": m.score * 2000.0,
-                    "reason": f"Exceeds remaining volume capacity (Requires: {load.volume} cu ft, Available: {trip.remaining_volume_capacity} cu ft)"
+                    "load_id": shipment.id,
+                    "pickup_name": shipment.pickup_location,
+                    "dropoff_name": shipment.dropoff_location,
+                    "weight": shipment.weight,
+                    "volume": shipment.volume,
+                    "price": shipment.price,
+                    "reason": f"Exceeds remaining volume capacity (Requires: {shipment.volume} cu ft, Available: {trip.remaining_volume_capacity} cu ft)"
                 })
-                trace_steps.append(f"⚠️ Pre-rejected Load ID {load.id} ({load.pickup_name} -> {load.dropoff_name}) because it exceeds remaining volume capacity.")
+                trace_steps.append(f"⚠️ Pre-rejected Shipment ID {shipment.id} ({shipment.pickup_location} -> {shipment.dropoff_location}) because it exceeds remaining volume capacity.")
                 continue
 
-            # Determine price. If there's an agent price or match score, let's extract it
-            # We can query matches table or calculate using agent calculation
-            # To be robust, calculate price using agent's standard algorithm
-            from app.services.agent_service import FreightShareAgentService
-            price, _ = FreightShareAgentService.calculate_price(
-                load.weight, load.volume, "general", load.pickup_name, load.dropoff_name
-            )
-
             candidate_loads.append({
-                "id": load.id,
-                "pickup_name": load.pickup_name,
-                "dropoff_name": load.dropoff_name,
+                "id": shipment.id,
+                "pickup_name": shipment.pickup_location,
+                "dropoff_name": shipment.dropoff_location,
                 "pickup_lat": p_lat,
                 "pickup_lng": p_lng,
                 "dropoff_lat": d_lat,
                 "dropoff_lng": d_lng,
-                "weight": load.weight,
-                "volume": load.volume,
-                "price": price
+                "weight": shipment.weight,
+                "volume": shipment.volume,
+                "price": shipment.price
             })
 
         trace_steps.append(f"🔍 Found {len(candidate_loads)} candidate packages for cost-optimization evaluation.")

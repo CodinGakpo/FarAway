@@ -16,7 +16,7 @@ router = APIRouter(
 customer_only = RoleChecker(["customer"])
 driver_only = RoleChecker(["driver"])
 
-@router.post("/", response_model=ShipmentResponse, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=ShipmentResponse, status_code=status.HTTP_201_CREATED)
 def create_shipment_request(
     shipment_in: ShipmentCreate, 
     db: Session = Depends(get_db), 
@@ -191,7 +191,7 @@ def update_shipment_status(
     return shipment
 
 
-@router.get("/", response_model=List[ShipmentResponse])
+@router.get("", response_model=List[ShipmentResponse])
 def list_shipments(
     customer_id: Optional[int] = None,
     trip_id: Optional[int] = None,

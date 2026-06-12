@@ -7,6 +7,7 @@ import '../config/constants.dart';
 import '../models/shipment_request.dart';
 import '../models/trip.dart';
 import '../models/user.dart';
+import '../models/agent_models.dart';
 
 // Thrown when the server returns 401 Unauthorized (token expired / invalid).
 class UnauthorizedException implements Exception {
@@ -182,11 +183,11 @@ class ApiService {
     final response = await _post(
       AppConstants.TRIPS,
       {
-        'origin': origin,
-        'destination': destination,
-        'date': date.toIso8601String(),
-        'maxWeight': maxWeight,
-        'maxVolume': maxVolume,
+        'origin_name': origin,
+        'destination_name': destination,
+        'departure_time': date.toIso8601String(),
+        'max_weight_capacity': maxWeight,
+        'max_volume_capacity': maxVolume,
       },
     );
 
@@ -340,6 +341,156 @@ class ApiService {
       final data =
           _extractMap(body, ['shipment', 'data'], entityName: 'shipment');
       return ShipmentRequest.fromJson(data);
+    });
+  }
+
+  // ── Agent Tools ────────────────────────────────────────────────────────────
+
+  Future<FindTripsResponse> findCandidateTrips(
+    GeoPoint pickup,
+    GeoPoint dropoff,
+    double weightKg,
+    double volumeM3, {
+    double searchRadiusKm = 50.0,
+  }) async {
+    final response = await _post(
+      '/agent/tools/find-trips',
+      {
+        'pickup': pickup.toJson(),
+        'dropoff': dropoff.toJson(),
+        'weight_kg': weightKg,
+        'volume_m3': volumeM3,
+        'search_radius_km': searchRadiusKm,
+      },
+    );
+    return _handleResponse(response, (body) {
+      return FindTripsResponse.fromJson(body as Map<String, dynamic>);
+    });
+  }
+
+  Future<AnalyzeRouteResponse> analyzeRoute(
+    String tripId,
+    GeoPoint pickup,
+    GeoPoint dropoff,
+  ) async {
+    final response = await _post(
+      '/agent/tools/analyze-route',
+      {
+        'trip_id': tripId,
+        'pickup': pickup.toJson(),
+        'dropoff': dropoff.toJson(),
+      },
+    );
+    return _handleResponse(response, (body) {
+      return AnalyzeRouteResponse.fromJson(body as Map<String, dynamic>);
+    });
+  }
+
+  Future<CheckCapacityResponse> checkCapacity(
+    String tripId,
+    double weightKg,
+    double volumeM3,
+  ) async {
+    final response = await _post(
+      '/agent/tools/check-capacity',
+      {
+        'trip_id': tripId,
+        'weight_kg': weightKg,
+        'volume_m3': volumeM3,
+      },
+    );
+    return _handleResponse(response, (body) {
+      return CheckCapacityResponse.fromJson(body as Map<String, dynamic>);
+    });
+  }
+
+  Future<AgentEvaluationResponse> evaluateShipment(
+    String tripId,
+    String pickupLocation,
+    String dropoffLocation,
+    double weightKg,
+    double volumeM3,
+    String cargoCategory,
+  ) async {
+    final response = await _post(
+      '/agent/evaluate',
+      {
+        'trip_id': int.parse(tripId),
+        'pickup_location': pickupLocation,
+        'dropoff_location': dropoffLocation,
+        'weight': weightKg,
+        'volume': volumeM3,
+        'cargo_category': cargoCategory,
+      },
+    );
+    return _handleResponse(response, (body) {
+      return AgentEvaluationResponse.fromJson(body as Map<String, dynamic>);
+    });
+  }
+
+  Future<CalculatePriceResponse> calculatePrice(
+    String tripId,
+    double shipmentDistanceKm,
+    double weightKg,
+    double volumeM3,
+    double detourDistanceKm,
+    double utilizationPct, {
+    String goodsType = 'general',
+  }) async {
+    final response = await _post(
+      '/agent/tools/calculate-price',
+      {
+        'trip_id': tripId,
+        'shipment_distance_km': shipmentDistanceKm,
+        'weight_kg': weightKg,
+        'volume_m3': volumeM3,
+        'goods_type': goodsType,
+        'detour_distance_km': detourDistanceKm,
+        'utilization_pct': utilizationPct,
+      },
+    );
+    return _handleResponse(response, (body) {
+      return CalculatePriceResponse.fromJson(body as Map<String, dynamic>);
+    });
+  }
+
+  Future<HoldCapacityResponse> holdCapacity(
+    String tripId,
+    String shipmentId,
+    double weightKg,
+    double volumeM3,
+    double priceAmount,
+    Map<String, dynamic> priceBreakdown,
+    double detourDistanceKm,
+    double detourDurationMin,
+  ) async {
+    final response = await _post(
+      '/agent/tools/hold-capacity',
+      {
+        'trip_id': tripId,
+        'shipment_id': shipmentId,
+        'weight_kg': weightKg,
+        'volume_m3': volumeM3,
+        'price_amount': priceAmount,
+        'price_breakdown': priceBreakdown,
+        'detour_distance_km': detourDistanceKm,
+        'detour_duration_min': detourDurationMin,
+      },
+    );
+    return _handleResponse(response, (body) {
+      return HoldCapacityResponse.fromJson(body as Map<String, dynamic>);
+    });
+  }
+
+  Future<bool> confirmBookingAgent(String bookingId) async {
+    final response = await _post(
+      '/agent/tools/confirm-booking',
+      {
+        'booking_id': bookingId,
+      },
+    );
+    return _handleResponse(response, (body) {
+      return (body as Map<String, dynamic>)['success'] == true;
     });
   }
 

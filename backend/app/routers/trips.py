@@ -34,7 +34,7 @@ def get_trip_coordinates(trip_id: int, db: Session) -> Optional[List[List[float]
             pass
     return None
 
-@router.post("/", response_model=TripResponse, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=TripResponse, status_code=status.HTTP_201_CREATED)
 def create_trip(
     trip_in: TripCreate, 
     db: Session = Depends(get_db), 
@@ -73,7 +73,7 @@ def create_trip(
     return response_data
 
 
-@router.get("/", response_model=List[TripResponse])
+@router.get("", response_model=List[TripResponse])
 def list_trips(
     driver_id: Optional[str] = None,
     status: Optional[str] = "ACTIVE",
@@ -94,6 +94,21 @@ def list_trips(
         results.append(res)
     return results
 
+@router.get("/active", response_model=TripResponse)
+def get_active_trip(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(driver_only)
+):
+    trip = db.query(Trip).filter(Trip.driver_id == current_user.id, Trip.status == "ACTIVE").first()
+    if not trip:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No active trip found"
+        )
+    
+    res = TripResponse.from_orm(trip)
+    res.route_coordinates = get_trip_coordinates(trip.id, db)
+    return res
 
 @router.get("/active", response_model=TripResponse)
 def get_active_trip(
