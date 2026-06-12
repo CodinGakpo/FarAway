@@ -1,30 +1,28 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 
+import '../../core/app_theme.dart';
 import '../../models/trip.dart';
 import '../../services/api_service.dart';
-import '../../services/auth_provider.dart';
-import '../../widgets/empty_state.dart';
-import '../../widgets/loading_button.dart';
-import '../../widgets/section_header.dart';
-import '../../widgets/status_chip.dart';
+
+import '../../widgets/fallback_map.dart';
 import 'create_trip_screen.dart';
 import 'incoming_requests_screen.dart';
-import '../auth/login_screen.dart';
+import 'active_trip_dashboard.dart';
 
-class DriverHomeScreen extends StatefulWidget {
-  const DriverHomeScreen({super.key});
+class DriverHomeTab extends StatefulWidget {
+  const DriverHomeTab({super.key});
 
   @override
-  State<DriverHomeScreen> createState() => _DriverHomeScreenState();
+  State<DriverHomeTab> createState() => _DriverHomeTabState();
 }
 
-class _DriverHomeScreenState extends State<DriverHomeScreen> {
+class _DriverHomeTabState extends State<DriverHomeTab> {
   final ApiService _apiService = ApiService();
+  final DraggableScrollableController _sheetController = DraggableScrollableController();
 
   Trip? _activeTrip;
   bool _isLoading = true;
-  String? _errorMessage;
+
 
   @override
   void initState() {
@@ -32,60 +30,33 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
     _loadActiveTrip();
   }
 
+  @override
+  void dispose() {
+    _sheetController.dispose();
+    super.dispose();
+  }
+
   Future<void> _loadActiveTrip() async {
+    if (!mounted) return;
     setState(() {
       _isLoading = true;
-      _errorMessage = null;
     });
 
     try {
       final trip = await _apiService.getActiveTrip();
-      if (!mounted) {
-        return;
-      }
+      if (!mounted) return;
       setState(() {
         _activeTrip = trip;
+        _isLoading = false;
       });
     } catch (error) {
-      if (!mounted) {
-        return;
-      }
-      final errorMsg = error.toString().replaceFirst('Exception: ', '');
-      debugPrint('[DriverHomeScreen] Silent active trip load connection warning: $errorMsg');
+      if (!mounted) return;
+      // Fail silently or set to null if backend returns error
       setState(() {
         _activeTrip = null;
-        _errorMessage = null;
+        _isLoading = false;
       });
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
-      }
     }
-  }
-
-  Future<void> _logout() async {
-    await Provider.of<AuthProvider>(context, listen: false).logout();
-    if (!mounted) {
-      return;
-    }
-    Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute(builder: (_) => const LoginScreen()),
-      (route) => false,
-    );
-  }
-
-  void _goToIncomingRequests() {
-    if (_activeTrip == null) {
-      return;
-    }
-
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => IncomingRequestsScreen(tripId: _activeTrip!.id),
-      ),
-    );
   }
 
   void _goToCreateTrip() {
@@ -102,240 +73,274 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
     });
   }
 
+  void _goToRequests() {
+    if (_activeTrip == null) return;
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => IncomingRequestsScreen(tripId: _activeTrip!.id),
+      ),
+    ).then((_) {
+      if (mounted) _loadActiveTrip();
+    });
+  }
+
+  void _goToActiveTrip() {
+    if (_activeTrip == null) return;
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => ActiveTripDashboard(trip: _activeTrip!),
+      ),
+    ).then((_) {
+      if (mounted) _loadActiveTrip();
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
-    const green = Color(0xFF1D9E75);
-
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('FreightShare'),
-        actions: [
-          IconButton(
-            onPressed: _logout,
-            icon: const Icon(Icons.logout),
-            tooltip: 'Logout',
+      body: Stack(
+        children: [
+          // 1. Fallback Map background
+          FallbackMap(
+            pickupAddress: _activeTrip?.origin,
+            dropAddress: _activeTrip?.destination,
+            showLogoPill: true,
           ),
-        ],
-      ),
-      body: SafeArea(
-        child: AnimatedSwitcher(
-          duration: const Duration(milliseconds: 250),
-          child: _isLoading
-              ? const Center(child: CircularProgressIndicator())
-              : _errorMessage != null
-                  ? Center(
+
+          // 2. Sliding bottom sheet
+          DraggableScrollableSheet(
+            controller: _sheetController,
+            initialChildSize: _activeTrip == null ? 0.28 : 0.38,
+            minChildSize: 0.15,
+            maxChildSize: 0.70,
+            snap: true,
+            snapSizes: const [0.15, 0.28, 0.38, 0.70],
+            builder: (context, scrollController) {
+              return Container(
+                decoration: const BoxDecoration(
+                  color: AppColors.surface,
+                  borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Color(0x1A000000),
+                      blurRadius: 20,
+                      offset: Offset(0, -4),
+                    ),
+                  ],
+                ),
+                child: ListView(
+                  controller: scrollController,
+                  padding: EdgeInsets.zero,
+                  children: [
+                    // Handle
+                    Center(
                       child: Padding(
-                        padding: const EdgeInsets.all(24),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              Icons.error_outline,
-                              size: 64,
-                              color: Colors.red.shade400,
-                            ),
-                            const SizedBox(height: 12),
-                            Text(
-                              _errorMessage!,
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                fontSize: 15,
-                                color: Colors.grey.shade700,
-                              ),
-                            ),
-                            const SizedBox(height: 20),
-                            LoadingButton(
-                              label: 'Retry',
-                              onPressed: _loadActiveTrip,
-                              isLoading: false,
-                            ),
-                          ],
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        child: Container(
+                          width: 40,
+                          height: 4,
+                          decoration: BoxDecoration(
+                            color: Colors.grey.shade300,
+                            borderRadius: BorderRadius.circular(2),
+                          ),
                         ),
                       ),
-                    )
-                  : _activeTrip == null
-                      ? Center(
-                          child: Padding(
-                            padding: const EdgeInsets.all(24),
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                const EmptyState(
-                                  message: 'No active trip',
-                                  icon: Icons.route_outlined,
-                                ),
-                                const SizedBox(height: 12),
-                                LoadingButton(
-                                  label: 'Create Trip',
-                                  onPressed: _goToCreateTrip,
-                                  isLoading: false,
-                                ),
-                              ],
-                            ),
-                          ),
-                        )
-                      : RefreshIndicator(
-                          onRefresh: _loadActiveTrip,
-                          child: ListView(
-                            padding: const EdgeInsets.all(24),
-                            children: [
-                              const SectionHeader(title: 'Active Trip'),
-                              _TripCard(trip: _activeTrip!),
-                              const SizedBox(height: 24),
-                              LoadingButton(
-                                label: 'View Incoming Requests',
-                                onPressed: _goToIncomingRequests,
-                                isLoading: false,
-                              ),
-                            ],
-                          ),
-                        ),
-        ),
-      ),
-    );
-  }
-}
+                    ),
 
-class _TripCard extends StatelessWidget {
-  const _TripCard({required this.trip});
-
-  final Trip trip;
-
-  @override
-  Widget build(BuildContext context) {
-    final remainingWeightProgress = _progressValue(
-      trip.remainingWeight,
-      trip.maxWeight,
-    );
-    final remainingVolumeProgress = _progressValue(
-      trip.remainingVolume,
-      trip.maxVolume,
-    );
-
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(18),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 20,
-            offset: const Offset(0, 10),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  '${trip.origin} → ${trip.destination}',
-                  style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w700,
-                    color: Color(0xFF173B2F),
-                  ),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 20),
+                      child: _isLoading
+                          ? const SizedBox(
+                              height: 120,
+                              child: Center(child: CircularProgressIndicator()),
+                            )
+                          : _activeTrip == null
+                              ? _buildReadyToDrive()
+                              : _buildActiveTripCard(),
+                    ),
+                    const SizedBox(height: 24),
+                  ],
                 ),
-              ),
-              StatusChip(status: trip.status),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Text(
-            _formatDate(trip.date),
-            style: TextStyle(
-              color: Colors.grey.shade600,
-              fontSize: 14,
-            ),
-          ),
-          const SizedBox(height: 20),
-          _MetricProgress(
-            label: 'Remaining weight',
-            value: trip.remainingWeight,
-            maxValue: trip.maxWeight,
-            progress: remainingWeightProgress,
-          ),
-          const SizedBox(height: 16),
-          _MetricProgress(
-            label: 'Remaining volume',
-            value: trip.remainingVolume,
-            maxValue: trip.maxVolume,
-            progress: remainingVolumeProgress,
+              );
+            },
           ),
         ],
       ),
     );
   }
 
-  double _progressValue(double remaining, double max) {
-    if (max <= 0) {
-      return 0;
-    }
-    final ratio = remaining / max;
-    return ratio.clamp(0.0, 1.0);
-  }
-
-  String _formatDate(DateTime date) {
-    final monthNames = [
-      'Jan',
-      'Feb',
-      'Mar',
-      'Apr',
-      'May',
-      'Jun',
-      'Jul',
-      'Aug',
-      'Sep',
-      'Oct',
-      'Nov',
-      'Dec',
-    ];
-
-    final month = monthNames[date.month - 1];
-    final day = date.day.toString().padLeft(2, '0');
-    return '$month $day, ${date.year}';
-  }
-}
-
-class _MetricProgress extends StatelessWidget {
-  const _MetricProgress({
-    required this.label,
-    required this.value,
-    required this.maxValue,
-    required this.progress,
-  });
-
-  final String label;
-  final double value;
-  final double maxValue;
-  final double progress;
-
-  @override
-  Widget build(BuildContext context) {
-    const green = Color(0xFF1D9E75);
-
+  Widget _buildReadyToDrive() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          '$label: ${value.toStringAsFixed(1)} / ${maxValue.toStringAsFixed(1)}',
-          style: const TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.w600,
-            color: Color(0xFF173B2F),
+        const Text(
+          'Ready to Drive?',
+          style: TextStyle(
+            fontSize: 22,
+            fontWeight: FontWeight.w800,
+            color: AppColors.textPrimary,
+            letterSpacing: -0.5,
           ),
         ),
-        const SizedBox(height: 8),
-        ClipRRect(
-          borderRadius: BorderRadius.circular(999),
-          child: LinearProgressIndicator(
-            minHeight: 10,
-            value: progress,
-            backgroundColor: Colors.grey.shade200,
-            valueColor: const AlwaysStoppedAnimation<Color>(green),
+        const SizedBox(height: 4),
+        const Text(
+          'Create a trip to start accepting shipments',
+          style: TextStyle(
+            fontSize: 14,
+            color: AppColors.textSecondary,
+          ),
+        ),
+        const SizedBox(height: 20),
+        SizedBox(
+          width: double.infinity,
+          child: ElevatedButton(
+            onPressed: _goToCreateTrip,
+            child: const Text('Create Trip'),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildActiveTripCard() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Text(
+              'Active Trip',
+              style: TextStyle(
+                fontSize: 22,
+                fontWeight: FontWeight.w800,
+                color: AppColors.textPrimary,
+                letterSpacing: -0.5,
+              ),
+            ),
+            // Status Chip (Active/Green)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                color: AppColors.primaryLight,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Text(
+                'ACTIVE',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.primary,
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+
+        // Trip route summary
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: const Color(0xFFF3F4F6),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: AppColors.border),
+          ),
+          child: Row(
+            children: [
+              Column(
+                children: [
+                  const Icon(Icons.circle, size: 10, color: AppColors.primary),
+                  Container(
+                    width: 2,
+                    height: 16,
+                    color: Colors.grey.shade300,
+                  ),
+                  const Icon(Icons.location_on, size: 14, color: AppColors.orange),
+                ],
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      _activeTrip!.origin,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.textPrimary,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      _activeTrip!.destination,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.textPrimary,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 16),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  const Text(
+                    'Route Distance',
+                    style: TextStyle(
+                      fontSize: 10,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    '250 km', // Dummy route distance or dynamically computed
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 20),
+
+        // Action Buttons
+        SizedBox(
+          width: double.infinity,
+          child: ElevatedButton(
+            onPressed: _goToActiveTrip,
+            child: const Text('View Active Trip'),
+          ),
+        ),
+        const SizedBox(height: 10),
+        SizedBox(
+          width: double.infinity,
+          child: OutlinedButton(
+            onPressed: _goToRequests,
+            style: OutlinedButton.styleFrom(
+              foregroundColor: AppColors.primary,
+              side: const BorderSide(color: AppColors.primary, width: 1.5),
+              minimumSize: const Size(double.infinity, 52),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14),
+              ),
+              textStyle: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            child: const Text('View Requests'),
           ),
         ),
       ],

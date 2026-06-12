@@ -1,14 +1,15 @@
 import 'package:flutter/material.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart';
+
 import 'package:provider/provider.dart';
 import '../../core/app_theme.dart';
 import '../../models/location_point.dart';
 import '../../providers/booking_provider.dart';
 import '../../providers/shipment_provider.dart';
-import '../../services/mock_data_service.dart';
+
 import 'location_picker_screen.dart';
 import 'shipment_details_screen.dart';
 import 'tracking_screen.dart';
+import '../../widgets/fallback_map.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -18,119 +19,25 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  GoogleMapController? _mapController;
   final DraggableScrollableController _sheetController =
       DraggableScrollableController();
 
-  Set<Marker> _markers = {};
-  Set<Polyline> _polylines = {};
-
   @override
   void dispose() {
-    _mapController?.dispose();
     _sheetController.dispose();
     super.dispose();
   }
 
-  void _onMapCreated(GoogleMapController c) {
-    _mapController = c;
-  }
-
   void _recenter() {
-    _mapController?.animateCamera(
-      CameraUpdate.newCameraPosition(
-        const CameraPosition(
-          target: MockDataService.defaultCenter,
-          zoom: 13,
-        ),
-      ),
-    );
+    // No-op fallback
   }
 
   void _updateMapOverlays(
       LocationPoint? pickup, LocationPoint? drop) {
-    final markers = <Marker>{};
-    final polylines = <Polyline>{};
-
-    if (pickup != null) {
-      markers.add(Marker(
-        markerId: const MarkerId('pickup'),
-        position: pickup.latLng,
-        icon: BitmapDescriptor.defaultMarkerWithHue(
-            BitmapDescriptor.hueGreen),
-        infoWindow: InfoWindow(title: 'Pickup', snippet: pickup.shortAddress),
-      ));
-    }
-    if (drop != null) {
-      markers.add(Marker(
-        markerId: const MarkerId('drop'),
-        position: drop.latLng,
-        icon: BitmapDescriptor.defaultMarkerWithHue(
-            BitmapDescriptor.hueOrange),
-        infoWindow: InfoWindow(title: 'Drop', snippet: drop.shortAddress),
-      ));
-    }
-
-    if (pickup != null && drop != null) {
-      final pts = _interpolateRoute(pickup.latLng, drop.latLng, 25);
-      polylines.add(Polyline(
-        polylineId: const PolylineId('route'),
-        points: pts,
-        color: AppColors.primary,
-        width: 4,
-        patterns: [],
-      ));
-
-      final bounds = _boundsOf(pickup.latLng, drop.latLng);
-      _mapController?.animateCamera(
-        CameraUpdate.newLatLngBounds(bounds, 80),
-      );
-    } else if (pickup != null) {
-      _mapController?.animateCamera(
-        CameraUpdate.newCameraPosition(
-          CameraPosition(target: pickup.latLng, zoom: 14),
-        ),
-      );
-    }
-
-    setState(() {
-      _markers = markers;
-      _polylines = polylines;
-    });
+    // No-op fallback
   }
 
-  List<LatLng> _interpolateRoute(LatLng a, LatLng b, int steps) {
-    return List.generate(steps + 1, (i) {
-      final midLat = (a.latitude + b.latitude) / 2 + 0.02;
-      final midLng = (a.longitude + b.longitude) / 2 + 0.01;
-      if (i < steps ~/ 2) {
-        final s = i / (steps ~/ 2);
-        return LatLng(
-          a.latitude * (1 - s) + midLat * s,
-          a.longitude * (1 - s) + midLng * s,
-        );
-      } else {
-        final s = (i - steps ~/ 2) / (steps - steps ~/ 2);
-        return LatLng(
-          midLat * (1 - s) + b.latitude * s,
-          midLng * (1 - s) + b.longitude * s,
-        );
-      }
-    });
-  }
 
-  LatLngBounds _boundsOf(LatLng a, LatLng b) {
-    return LatLngBounds(
-      southwest: LatLng(
-        a.latitude < b.latitude ? a.latitude : b.latitude,
-        a.longitude < b.longitude ? a.longitude : b.longitude,
-      ),
-      northeast: LatLng(
-        a.latitude > b.latitude ? a.latitude : b.latitude,
-        a.longitude > b.longitude ? a.longitude : b.longitude,
-      ),
-    );
-  }
 
   Future<void> _selectPickup() async {
     final loc = await LocationPickerSheet.showPickup(context);
@@ -162,18 +69,15 @@ class _HomeScreenState extends State<HomeScreen> {
     return Scaffold(
       body: Stack(
         children: [
-          GoogleMap(
-            onMapCreated: _onMapCreated,
-            initialCameraPosition: const CameraPosition(
-              target: MockDataService.defaultCenter,
-              zoom: 12.5,
-            ),
-            markers: _markers,
-            polylines: _polylines,
-            myLocationButtonEnabled: false,
-            myLocationEnabled: true,
-            zoomControlsEnabled: false,
-            mapToolbarEnabled: false,
+          Consumer<ShipmentProvider>(
+            builder: (context, shipmentProv, _) {
+              final draft = shipmentProv.draft;
+              return FallbackMap(
+                pickupAddress: draft.pickup?.shortAddress,
+                dropAddress: draft.drop?.shortAddress,
+                showLogoPill: false,
+              );
+            },
           ),
 
           // Top overlay

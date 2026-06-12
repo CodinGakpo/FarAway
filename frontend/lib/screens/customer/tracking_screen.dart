@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:provider/provider.dart';
@@ -7,6 +6,7 @@ import '../../core/app_theme.dart';
 import '../../models/booking.dart';
 import '../../providers/booking_provider.dart';
 import '../../providers/shipment_provider.dart';
+import '../../widgets/fallback_map.dart';
 
 class TrackingScreen extends StatefulWidget {
   const TrackingScreen({super.key});
@@ -17,15 +17,13 @@ class TrackingScreen extends StatefulWidget {
 
 class _TrackingScreenState extends State<TrackingScreen>
     with TickerProviderStateMixin {
-  GoogleMapController? _mapController;
   Timer? _movementTimer;
   Timer? _statusTimer;
 
   int _step = 0;
   final int _totalSteps = 60;
 
-  Set<Marker> _markers = {};
-  Set<Polyline> _polylines = {};
+
 
   late List<LatLng> _routePoints;
   LatLng? _truckPosition;
@@ -59,7 +57,6 @@ class _TrackingScreenState extends State<TrackingScreen>
     _truckPosition = _routePoints.first;
 
     _updateMarkers(booking);
-    _fitCamera(pickup, drop);
     _startSimulation();
   }
 
@@ -118,10 +115,7 @@ class _TrackingScreenState extends State<TrackingScreen>
 
       _updateMarkers(booking);
 
-      // Keep truck centered
-      _mapController?.animateCamera(
-        CameraUpdate.newLatLng(_truckPosition!),
-      );
+
     } else {
       // Delivery complete
       _movementTimer?.cancel();
@@ -130,77 +124,7 @@ class _TrackingScreenState extends State<TrackingScreen>
   }
 
   void _updateMarkers(Booking booking) {
-    if (_truckPosition == null) return;
-    final pickup = booking.draft.pickup?.latLng;
-    final drop = booking.draft.drop?.latLng;
-
-    setState(() {
-      _markers = {
-        Marker(
-          markerId: const MarkerId('truck'),
-          position: _truckPosition!,
-          icon: BitmapDescriptor.defaultMarkerWithHue(
-              BitmapDescriptor.hueBlue),
-          infoWindow: InfoWindow(
-            title: booking.draft.selectedTruck?.driverName ?? 'Driver',
-            snippet: booking.draft.selectedTruck?.truckNumber,
-          ),
-        ),
-        if (pickup != null)
-          Marker(
-            markerId: const MarkerId('pickup'),
-            position: pickup,
-            icon: BitmapDescriptor.defaultMarkerWithHue(
-                BitmapDescriptor.hueGreen),
-            infoWindow: InfoWindow(
-                title: 'Pickup',
-                snippet: booking.draft.pickup?.shortAddress),
-          ),
-        if (drop != null)
-          Marker(
-            markerId: const MarkerId('drop'),
-            position: drop,
-            icon: BitmapDescriptor.defaultMarkerWithHue(
-                BitmapDescriptor.hueOrange),
-            infoWindow: InfoWindow(
-                title: 'Destination',
-                snippet: booking.draft.drop?.shortAddress),
-          ),
-      };
-
-      if (pickup != null && drop != null) {
-        _polylines = {
-          Polyline(
-            polylineId: const PolylineId('route'),
-            points: _routePoints,
-            color: AppColors.border,
-            width: 4,
-          ),
-          Polyline(
-            polylineId: const PolylineId('travelled'),
-            points: _routePoints.sublist(0, _step + 1),
-            color: AppColors.primary,
-            width: 4,
-          ),
-        };
-      }
-    });
-  }
-
-  void _fitCamera(LatLng a, LatLng b) {
-    final bounds = LatLngBounds(
-      southwest: LatLng(
-        math.min(a.latitude, b.latitude),
-        math.min(a.longitude, b.longitude),
-      ),
-      northeast: LatLng(
-        math.max(a.latitude, b.latitude),
-        math.max(a.longitude, b.longitude),
-      ),
-    );
-    _mapController?.animateCamera(
-      CameraUpdate.newLatLngBounds(bounds, 80),
-    );
+    setState(() {});
   }
 
   void _showDeliveredDialog() {
@@ -250,7 +174,6 @@ class _TrackingScreenState extends State<TrackingScreen>
   void dispose() {
     _movementTimer?.cancel();
     _statusTimer?.cancel();
-    _mapController?.dispose();
     _pulseController.dispose();
     super.dispose();
   }
@@ -270,18 +193,13 @@ class _TrackingScreenState extends State<TrackingScreen>
       body: Stack(
         children: [
           // Map
-          GoogleMap(
-            onMapCreated: (c) => _mapController = c,
-            initialCameraPosition: CameraPosition(
-              target: booking.draft.pickup?.latLng ??
-                  const LatLng(19.0595, 72.8295),
-              zoom: 12.5,
-            ),
-            markers: _markers,
-            polylines: _polylines,
-            myLocationButtonEnabled: false,
-            zoomControlsEnabled: false,
-            mapToolbarEnabled: false,
+          FallbackMap(
+            pickupAddress: booking.draft.pickup?.shortAddress,
+            dropAddress: booking.draft.drop?.shortAddress,
+            truckProgress: progress,
+            truckLabel: booking.draft.selectedTruck?.driverName ?? 'Driver',
+            truckSublabel: booking.draft.selectedTruck?.truckNumber,
+            showLogoPill: false, // The tracking screen does not have the logo pill overlay
           ),
 
           // Top back button

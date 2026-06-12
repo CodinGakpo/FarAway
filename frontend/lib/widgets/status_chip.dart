@@ -31,13 +31,14 @@ class StatusChip extends StatelessWidget {
       case 'PENDING':
         return Colors.amber;
       case 'ACCEPTED':
-        return Colors.green;
+      case 'ACTIVE':
+      case 'COMPLETED':
+      case 'DELIVERED':
+        return const Color(0xFF1D9E75);
       case 'REJECTED':
         return Colors.red;
       case 'PICKED_UP':
         return Colors.blue;
-      case 'DELIVERED':
-        return Colors.grey;
       default:
         return Colors.blueGrey;
     }

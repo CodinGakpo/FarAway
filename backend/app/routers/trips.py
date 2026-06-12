@@ -6,7 +6,7 @@ from typing import List, Optional
 
 from app.database import get_db, is_sqlite
 from app.models import Trip, User
-from app.schemas import TripCreate, TripResponse
+from app.schemas import TripCreate, TripResponse, ShipmentResponse
 from app.auth import get_current_user, RoleChecker
 from app.services.geo_service import GeoService
 
@@ -95,6 +95,44 @@ def list_trips(
     return results
 
 
+@router.get("/active", response_model=TripResponse)
+def get_active_trip(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(driver_only)
+):
+    trip = db.query(Trip).filter(
+        Trip.driver_id == current_user.id, 
+        Trip.status == "ACTIVE"
+    ).first()
+    if not trip:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No active trip found"
+        )
+    
+    res = TripResponse.from_orm(trip)
+    res.route_coordinates = get_trip_coordinates(trip.id, db)
+    return res
+
+
+@router.get("/history", response_model=List[TripResponse])
+def get_trip_history(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(driver_only)
+):
+    trips = db.query(Trip).filter(
+        Trip.driver_id == current_user.id,
+        Trip.status == "COMPLETED"
+    ).all()
+    
+    results = []
+    for trip in trips:
+        res = TripResponse.from_orm(trip)
+        res.route_coordinates = get_trip_coordinates(trip.id, db)
+        results.append(res)
+    return results
+
+
 @router.get("/{trip_id}", response_model=TripResponse)
 def get_trip(
     trip_id: int, 
@@ -135,3 +173,38 @@ def delete_trip(
     db.delete(trip)
     db.commit()
     return None
+
+
+@router.get("/{trip_id}/requests", response_model=List[ShipmentResponse])
+def get_incoming_requests(
+    trip_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(driver_only)
+):
+    from app.models import Shipment
+    trip = db.query(Trip).filter(Trip.id == trip_id, Trip.driver_id == current_user.id).first()
+    if not trip:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Trip not found"
+        )
+    return db.query(Shipment).filter(Shipment.trip_id == trip_id, Shipment.status == "PENDING").all()
+
+
+@router.get("/{trip_id}/shipments", response_model=List[ShipmentResponse])
+def get_trip_shipments(
+    trip_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(driver_only)
+):
+    from app.models import Shipment
+    trip = db.query(Trip).filter(Trip.id == trip_id, Trip.driver_id == current_user.id).first()
+    if not trip:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Trip not found"
+        )
+    return db.query(Shipment).filter(
+        Shipment.trip_id == trip_id, 
+        Shipment.status.in_(["ACCEPTED", "PICKED_UP", "DELIVERED"])
+    ).all()
