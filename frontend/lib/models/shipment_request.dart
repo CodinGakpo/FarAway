@@ -25,8 +25,8 @@ class ShipmentRequest {
 
   factory ShipmentRequest.fromJson(Map<String, dynamic> json) {
     return ShipmentRequest(
-      id: json['id'] as String,
-      customerId: json['customerId'] as String,
+      id: json['id']?.toString() ?? '',
+      customerId: json['customerId']?.toString() ?? '',
       pickupLocation: json['pickupLocation'] as String,
       dropoffLocation: json['dropoffLocation'] as String,
       weight: (json['weight'] as num).toDouble(),
@@ -34,7 +34,7 @@ class ShipmentRequest {
       cargoCategory: json['cargoCategory'] as String,
       status: json['status'] as String,
       price: json['price'] == null ? null : (json['price'] as num).toDouble(),
-      tripId: json['tripId'] as String?,
+      tripId: json['tripId']?.toString(),
     );
   }
 

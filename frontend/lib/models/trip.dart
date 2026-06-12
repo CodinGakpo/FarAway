@@ -27,8 +27,8 @@ class Trip {
 
   factory Trip.fromJson(Map<String, dynamic> json) {
     return Trip(
-      id: json['id'] as String,
-      driverId: json['driverId'] as String,
+      id: json['id']?.toString() ?? '',
+      driverId: json['driverId']?.toString() ?? '',
       driverName: json['driverName'] as String?,
       origin: json['origin'] as String,
       destination: json['destination'] as String,

@@ -249,6 +249,25 @@ class ApiService {
     });
   }
 
+  Future<List<Trip>> getTripHistory() async {
+    final response = await _get('${AppConstants.TRIPS}/history');
+
+    return _handleResponse(response, (body) {
+      if (body is List) {
+        return body
+            .map((item) => Trip.fromJson(Map<String, dynamic>.from(item as Map)))
+            .toList();
+      }
+      if (body is Map<String, dynamic>) {
+        final list = _extractList(body, ['trips', 'history', 'data']);
+        return list
+            .map((item) => Trip.fromJson(Map<String, dynamic>.from(item as Map)))
+            .toList();
+      }
+      return const [];
+    });
+  }
+
   Future<void> acceptRequest(String shipmentId) async {
     final response = await _post(
       '${AppConstants.BOOKINGS}/$shipmentId/accept',
