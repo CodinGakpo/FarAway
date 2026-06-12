@@ -3,7 +3,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 
 from app.database import engine, Base, is_sqlite
-from app.routers import auth, trips, loads, matches, railway, agent
+from app.routers import auth, trips, loads, matches, railway, agent, agent_tools
+from app.dependencies import get_db
 
 # Auto-enable PostGIS extension on PostgreSQL and create tables
 try:
@@ -37,6 +38,15 @@ app.include_router(loads.router)
 app.include_router(matches.router)
 app.include_router(railway.router)
 app.include_router(agent.router)
+app.include_router(agent_tools.router)
+
+@app.on_event("startup")
+async def startup_event():
+    await get_db().connect()
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    await get_db().disconnect()
 
 @app.get("/health", tags=["Health"])
 def health_check():
