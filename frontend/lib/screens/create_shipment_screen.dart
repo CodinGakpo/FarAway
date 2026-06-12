@@ -13,13 +13,16 @@ class _CreateShipmentScreenState extends State<CreateShipmentScreen> {
   final ApiService _api = ApiService();
   final List<String> _logs = [];
 
-  // Hardcoded coordinates for testing
-  final _pickupLat = TextEditingController(text: '12.9716');
-  final _pickupLng = TextEditingController(text: '77.5946');
-  final _dropoffLat = TextEditingController(text: '13.0827');
-  final _dropoffLng = TextEditingController(text: '80.2707');
+  // Hardcoded coordinates and cities for testing Niranjan's logic
+  final _pickupLat = TextEditingController(text: '12.9165');
+  final _pickupLng = TextEditingController(text: '79.1325');
+  final _pickupCity = TextEditingController(text: 'Vellore');
+  final _dropoffLat = TextEditingController(text: '12.9716');
+  final _dropoffLng = TextEditingController(text: '77.5946');
+  final _dropoffCity = TextEditingController(text: 'Bangalore');
   final _weight = TextEditingController(text: '500');
   final _volume = TextEditingController(text: '2.5');
+  final _cargoCategory = TextEditingController(text: 'fragile');
 
   bool _isRunning = false;
 
@@ -60,49 +63,29 @@ class _CreateShipmentScreenState extends State<CreateShipmentScreen> {
       final trip = findTripsResponse.trips.first;
       _log('✅ Found Trip: ${trip.tripId} (Distance: ${trip.baseDistanceKm}km)');
 
-      // 2. Analyze Route
-      _log('🗺️ Step 2: Analyzing route feasibility...');
-      final analyzeResponse = await _api.analyzeRoute(trip.tripId, pickup, dropoff);
+      // 2. Niranjan's AI Agent Evaluation
+      _log('🤖 Step 2: Running Niranjan\\'s AI Agent Evaluation...');
       
-      if (!analyzeResponse.feasible) {
-        _log('❌ Route not feasible: ${analyzeResponse.rejectionReason}');
-        return;
-      }
-      _log('✅ Route feasible! Detour: ${analyzeResponse.detourDistanceKm}km (${analyzeResponse.detourDurationMin}min)');
-
-      // 3. Check Capacity
-      _log('📦 Step 3: Checking truck capacity...');
-      final capacityResponse = await _api.checkCapacity(trip.tripId, weight, volume);
-      
-      if (!capacityResponse.available) {
-        _log('❌ Capacity unavailable: ${capacityResponse.rejectionReason}');
-        return;
-      }
-      _log('✅ Capacity available. Utilization will be ${(capacityResponse.utilizationPct * 100).toStringAsFixed(1)}%');
-
-      // 4. Calculate Price
-      _log('💰 Step 4: Calculating dynamic price...');
-      final priceResponse = await _api.calculatePrice(
+      final evalResponse = await _api.evaluateShipment(
         trip.tripId,
-        trip.baseDistanceKm, // Using base distance as proxy for shipment distance
+        _pickupCity.text,
+        _dropoffCity.text,
         weight,
         volume,
-        analyzeResponse.detourDistanceKm,
-        capacityResponse.utilizationPct,
+        _cargoCategory.text,
       );
       
-      _log('✅ Price calculated: ${priceResponse.currency} ${priceResponse.finalPrice}');
-      _log('   Base fare: ${priceResponse.breakdown.baseFare}');
-      _log('   Detour surcharge: ${priceResponse.breakdown.detourSurcharge}');
-      _log('   Platform fee: ${priceResponse.breakdown.platformFee}');
-      
-      if (priceResponse.isProfitable) {
-        _log('✅ Route is highly profitable for the driver.');
+      if (!evalResponse.feasible) {
+        _log('❌ Shipment Not Feasible.');
       } else {
-        _log('⚠️ Price hit the profitability floor to ensure driver earnings.');
+        _log('✅ Shipment Feasible!');
+        _log('💰 Proposed Price: ₹${evalResponse.price}');
       }
+      _log('\\n--- Agent Reasoning Trace ---');
+      _log(evalResponse.trace);
+      _log('------------------------------');
 
-      _log('🎉 AI Agent Evaluation Complete! You can now Hold/Confirm Capacity.');
+      _log('🎉 AI Agent Evaluation Complete!');
 
     } catch (e) {
       _log('❌ Error: $e');
@@ -138,9 +121,21 @@ class _CreateShipmentScreenState extends State<CreateShipmentScreen> {
             ),
             Row(
               children: [
+                Expanded(child: TextField(controller: _pickupCity, decoration: const InputDecoration(labelText: 'Pickup City'))),
+                const SizedBox(width: 8),
+                Expanded(child: TextField(controller: _dropoffCity, decoration: const InputDecoration(labelText: 'Dropoff City'))),
+              ],
+            ),
+            Row(
+              children: [
                 Expanded(child: TextField(controller: _weight, decoration: const InputDecoration(labelText: 'Weight (kg)'))),
                 const SizedBox(width: 8),
                 Expanded(child: TextField(controller: _volume, decoration: const InputDecoration(labelText: 'Volume (m3)'))),
+              ],
+            ),
+            Row(
+              children: [
+                Expanded(child: TextField(controller: _cargoCategory, decoration: const InputDecoration(labelText: 'Category (e.g. fragile)'))),
               ],
             ),
             const SizedBox(height: 16),

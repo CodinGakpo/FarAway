@@ -104,7 +104,7 @@ class RouteService:
                         ST_Transform(ST_SetSRID(route_geometry::geometry, 4326), 3857),
                         ST_Transform(ST_SetSRID(ST_MakePoint($4, $3)::geometry, 4326), 3857)
                     ) AS dropoff_pos
-                FROM legacy_trips WHERE id = $6::int
+                FROM trips WHERE id = $6::int
             """, pu_lat, pu_lng, do_lat, do_lng, trip.max_detour_km, int(trip.id))
 
         if not row['pickup_near']:

@@ -47,7 +47,7 @@ class TripRepository:
                        ST_MakePoint($3, $4)::geography) / 1000.0 AS dist_dropoff_km,
                    ARRAY[ST_Y(ST_StartPoint(t.route_geometry)), ST_X(ST_StartPoint(t.route_geometry))] as origin_point,
                    ARRAY[ST_Y(ST_EndPoint(t.route_geometry)), ST_X(ST_EndPoint(t.route_geometry))] as destination_point
-            FROM legacy_trips t
+            FROM trips t
             WHERE t.status = 'ACTIVE'
               AND DATE(t.departure_time) >= CURRENT_DATE
               AND ST_DWithin(t.route_geometry,
@@ -78,7 +78,7 @@ class TripRepository:
                    0.0 as dist_dropoff_km,
                    ARRAY[ST_Y(ST_StartPoint(t.route_geometry)), ST_X(ST_StartPoint(t.route_geometry))] as origin_point,
                    ARRAY[ST_Y(ST_EndPoint(t.route_geometry)), ST_X(ST_EndPoint(t.route_geometry))] as destination_point
-            FROM legacy_trips t WHERE t.id = $1::int
+            FROM trips t WHERE t.id = $1::int
             """, int(trip_id)
         )
         if row:

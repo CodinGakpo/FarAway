@@ -37,7 +37,7 @@ class CapacityService:
                     t.max_volume_capacity as max_volume_m3,
                     (t.max_weight_capacity - t.remaining_weight_capacity) as used_weight_kg,
                     (t.max_volume_capacity - t.remaining_volume_capacity) as used_volume_m3
-                FROM legacy_trips t
+                FROM trips t
                 WHERE t.id = $1::int
             """, int(trip_id))
 
@@ -101,7 +101,7 @@ class CapacityService:
                         (t.max_weight_capacity - t.remaining_weight_capacity) as used_weight_kg,
                         (t.max_volume_capacity - t.remaining_volume_capacity) as used_volume_m3,
                         1 as version
-                    FROM legacy_trips t
+                    FROM trips t
                     WHERE t.id = $1::int
                     FOR UPDATE
                 """, int(trip_id))
@@ -120,7 +120,7 @@ class CapacityService:
 
                 # Step 3: Update capacity
                 updated = await conn.execute("""
-                    UPDATE legacy_trips
+                    UPDATE trips
                     SET remaining_weight_capacity = remaining_weight_capacity - $2,
                         remaining_volume_capacity = remaining_volume_capacity - $3
                     WHERE id = $1::int
@@ -193,7 +193,7 @@ class CapacityService:
                     UPDATE bookings SET status = $2, updated_at = NOW() WHERE id = $1
                 """, booking_id, reason)
                 await conn.execute("""
-                    UPDATE legacy_trips
+                    UPDATE trips
                     SET remaining_weight_capacity = LEAST(max_weight_capacity, remaining_weight_capacity + $2),
                         remaining_volume_capacity  = LEAST(max_volume_capacity, remaining_volume_capacity + $3)
                     WHERE id = $1::int

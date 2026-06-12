@@ -24,7 +24,7 @@ def get_trip_coordinates(trip_id: int, db: Session) -> Optional[List[List[float]
     if is_sqlite:
         return [[80.2707, 13.0827], [77.5946, 12.9716]] # mock Chennai->Bangalore coordinates
         
-    query = text("SELECT ST_AsGeoJSON(route_geometry) FROM legacy_trips WHERE id = :id")
+    query = text("SELECT ST_AsGeoJSON(route_geometry) FROM trips WHERE id = :id")
     geom_json = db.execute(query, {"id": trip_id}).scalar()
     if geom_json:
         try:

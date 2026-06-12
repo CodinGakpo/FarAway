@@ -7,6 +7,26 @@ class GeoPoint {
   Map<String, dynamic> toJson() => {'lat': lat, 'lng': lng};
 }
 
+class AgentEvaluationResponse {
+  final bool feasible;
+  final double price;
+  final String trace;
+
+  AgentEvaluationResponse({
+    required this.feasible,
+    required this.price,
+    required this.trace,
+  });
+
+  factory AgentEvaluationResponse.fromJson(Map<String, dynamic> json) {
+    return AgentEvaluationResponse(
+      feasible: json['feasible'] ?? false,
+      price: (json['price'] as num?)?.toDouble() ?? 0.0,
+      trace: json['trace'] ?? '',
+    );
+  }
+}
+
 // ── Find Trips ────────────────────────────────────────────────────────
 
 class TripSummary {

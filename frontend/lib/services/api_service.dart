@@ -404,6 +404,30 @@ class ApiService {
     });
   }
 
+  Future<AgentEvaluationResponse> evaluateShipment(
+    String tripId,
+    String pickupLocation,
+    String dropoffLocation,
+    double weightKg,
+    double volumeM3,
+    String cargoCategory,
+  ) async {
+    final response = await _post(
+      '/agent/evaluate',
+      {
+        'trip_id': int.parse(tripId),
+        'pickup_location': pickupLocation,
+        'dropoff_location': dropoffLocation,
+        'weight': weightKg,
+        'volume': volumeM3,
+        'cargo_category': cargoCategory,
+      },
+    );
+    return _handleResponse(response, (body) {
+      return AgentEvaluationResponse.fromJson(body as Map<String, dynamic>);
+    });
+  }
+
   Future<CalculatePriceResponse> calculatePrice(
     String tripId,
     double shipmentDistanceKm,
