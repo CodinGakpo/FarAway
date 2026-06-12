@@ -29,31 +29,37 @@ class TokenData(BaseModel):
 # --- Trip Schemas ---
 
 class TripCreate(BaseModel):
-    origin_name: str
-    destination_name: str
-    departure_time: datetime
-    max_weight_capacity: float = Field(..., gt=0)
-    max_volume_capacity: float = Field(..., gt=0)
+    origin_name: str = Field(..., alias="origin")
+    destination_name: str = Field(..., alias="destination")
+    departure_time: datetime = Field(..., alias="date")
+    max_weight_capacity: float = Field(..., gt=0, alias="maxWeight")
+    max_volume_capacity: float = Field(..., gt=0, alias="maxVolume")
     # List of [lng, lat] coordinate pairs defining the route path
     route_coordinates: Optional[List[List[float]]] = None
 
+    class Config:
+        populate_by_name = True
+        allow_population_by_field_name = True
+
 class TripResponse(BaseModel):
     id: int
-    driver_id: str
-    origin_name: str
-    destination_name: str
-    departure_time: datetime
-    max_weight_capacity: float
-    max_volume_capacity: float
-    remaining_weight_capacity: float
-    remaining_volume_capacity: float
+    driver_id: str = Field(..., alias="driverId")
+    origin_name: str = Field(..., alias="origin")
+    destination_name: str = Field(..., alias="destination")
+    departure_time: datetime = Field(..., alias="date")
+    max_weight_capacity: float = Field(..., alias="maxWeight")
+    max_volume_capacity: float = Field(..., alias="maxVolume")
+    remaining_weight_capacity: float = Field(..., alias="remainingWeight")
+    remaining_volume_capacity: float = Field(..., alias="remainingVolume")
     status: str
-    route_coordinates: Optional[List[List[float]]] = None
-    created_at: datetime
+    route_coordinates: Optional[List[List[float]]] = Field(None, alias="routeCoordinates")
+    created_at: datetime = Field(..., alias="createdAt")
 
     class Config:
         from_attributes = True
         orm_mode = True
+        populate_by_name = True
+        allow_population_by_field_name = True
 
 
 # --- Load Schemas ---
@@ -182,4 +188,43 @@ class TripOptimizationResponse(BaseModel):
     gross_revenue: float
     net_profit: float
     trace: str = Field(..., description="Natural language reasoning trace of the optimizer")
+
+
+# --- Shipment Schemas ---
+
+class ShipmentCreate(BaseModel):
+    trip_id: Optional[int] = Field(None, alias="tripId")
+    pickup_location: str = Field(..., alias="pickupLocation")
+    dropoff_location: str = Field(..., alias="dropoffLocation")
+    weight: float = Field(..., gt=0)
+    volume: float = Field(..., gt=0)
+    cargo_category: str = Field(..., alias="cargoCategory")
+
+    class Config:
+        populate_by_name = True
+        allow_population_by_field_name = True
+
+class ShipmentResponse(BaseModel):
+    id: int
+    customer_id: str
+    trip_id: int
+    pickup_location: str
+    dropoff_location: str
+    weight: float
+    volume: float
+    cargo_category: str
+    price: float
+    status: str
+    feasibility_status: bool
+    feasibility_trace: Optional[str] = None
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+        orm_mode = True
+        populate_by_name = True
+        allow_population_by_field_name = True
+
+class ShipmentStatusUpdate(BaseModel):
+    status: str
 

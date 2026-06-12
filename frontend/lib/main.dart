@@ -3,7 +3,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:provider/provider.dart';
 
+import 'core/app_theme.dart';
 import 'firebase_options.dart';
+import 'providers/booking_provider.dart';
+import 'providers/shipment_provider.dart';
 import 'screens/auth/login_screen.dart';
 import 'screens/customer_home_screen.dart';
 import 'screens/driver_home_screen.dart';
@@ -48,16 +51,17 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProvider<AuthProvider>(
           create: (_) => AuthProvider(),
         ),
+        ChangeNotifierProvider<ShipmentProvider>(
+          create: (_) => ShipmentProvider(),
+        ),
+        ChangeNotifierProvider<BookingProvider>(
+          create: (_) => BookingProvider(),
+        ),
       ],
       child: MaterialApp(
-        title: 'Freight Bridge',
+        title: 'FarAway Cargo',
         debugShowCheckedModeBanner: false,
-        theme: ThemeData(
-          colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF1D9E75)),
-          primaryColor: const Color(0xFF1D9E75),
-          fontFamily: 'sans-serif',
-          useMaterial3: true,
-        ),
+        theme: AppTheme.light,
         home: const _AuthGate(),
       ),
     );

@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, ForeignKey, DateTime, Text, func
+from sqlalchemy import Column, Integer, String, Float, ForeignKey, DateTime, Text, func, Boolean
 from sqlalchemy.orm import relationship
 from geoalchemy2 import Geometry
 from app.database import Base, is_sqlite
@@ -15,6 +15,7 @@ class User(Base):
     # Relationships
     trips = relationship("Trip", back_populates="driver", cascade="all, delete-orphan")
     loads = relationship("Load", back_populates="shipper", cascade="all, delete-orphan")
+    shipments = relationship("Shipment", back_populates="customer", cascade="all, delete-orphan")
 
 
 class Trip(Base):
@@ -38,6 +39,7 @@ class Trip(Base):
     # Relationships
     driver = relationship("User", back_populates="trips")
     matches = relationship("Match", back_populates="trip", cascade="all, delete-orphan")
+    shipments = relationship("Shipment", back_populates="trip", cascade="all, delete-orphan")
 
 
 class Load(Base):
@@ -112,3 +114,25 @@ class Rating(Base):
 
     # Relationships
     match = relationship("Match", back_populates="ratings")
+
+
+class Shipment(Base):
+    __tablename__ = "shipments"
+
+    id = Column(Integer, primary_key=True, index=True)
+    customer_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    trip_id = Column(Integer, ForeignKey("trips.id", ondelete="CASCADE"), nullable=False)
+    pickup_location = Column(String, nullable=False)
+    dropoff_location = Column(String, nullable=False)
+    weight = Column(Float, nullable=False)
+    volume = Column(Float, nullable=False)
+    cargo_category = Column(String, nullable=False)
+    price = Column(Float, nullable=False, default=0.0)
+    status = Column(String, default="DRAFT")  # "DRAFT", "PENDING", "ACCEPTED", "PICKED_UP", "DELIVERED", "REJECTED"
+    feasibility_status = Column(Boolean, default=True)
+    feasibility_trace = Column(Text, nullable=True)
+    created_at = Column(DateTime, server_default=func.now())
+
+    # Relationships
+    customer = relationship("User", back_populates="shipments")
+    trip = relationship("Trip", back_populates="shipments")

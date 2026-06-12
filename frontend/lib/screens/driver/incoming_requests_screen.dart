@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
-
+import '../../core/app_theme.dart';
 import '../../models/shipment_request.dart';
 import '../../services/api_service.dart';
-import '../../widgets/empty_state.dart';
 import '../../widgets/status_chip.dart';
 
 class IncomingRequestsScreen extends StatefulWidget {
@@ -30,6 +29,7 @@ class _IncomingRequestsScreenState extends State<IncomingRequestsScreen> {
   }
 
   Future<void> _loadRequests() async {
+    if (!mounted) return;
     setState(() {
       _isLoading = true;
       _errorMessage = null;
@@ -37,25 +37,17 @@ class _IncomingRequestsScreenState extends State<IncomingRequestsScreen> {
 
     try {
       final requests = await _apiService.getIncomingRequests(widget.tripId);
-      if (!mounted) {
-        return;
-      }
+      if (!mounted) return;
       setState(() {
         _requests = requests;
+        _isLoading = false;
       });
     } catch (error) {
-      if (!mounted) {
-        return;
-      }
+      if (!mounted) return;
       setState(() {
         _errorMessage = error.toString().replaceFirst('Exception: ', '');
+        _isLoading = false;
       });
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
-      }
     }
   }
 
@@ -74,7 +66,7 @@ class _IncomingRequestsScreenState extends State<IncomingRequestsScreen> {
   Future<void> _performAction(
     String shipmentId,
     String action,
-    Future<void> Function() request,
+    Future<void> Function() apiCall,
   ) async {
     setState(() {
       _loadingShipmentId = shipmentId;
@@ -82,15 +74,11 @@ class _IncomingRequestsScreenState extends State<IncomingRequestsScreen> {
     });
 
     try {
-      await request();
-      if (!mounted) {
-        return;
-      }
+      await apiCall();
+      if (!mounted) return;
       await _loadRequests();
     } catch (error) {
-      if (!mounted) {
-        return;
-      }
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(error.toString().replaceFirst('Exception: ', '')),
@@ -109,78 +97,91 @@ class _IncomingRequestsScreenState extends State<IncomingRequestsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Incoming Requests')),
+      backgroundColor: AppColors.background,
+      appBar: AppBar(
+        title: const Text('Shipment Requests'),
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(1),
+          child: Container(height: 1, color: AppColors.border),
+        ),
+      ),
       body: SafeArea(
-        child: AnimatedSwitcher(
-          duration: const Duration(milliseconds: 250),
+        child: RefreshIndicator(
+          onRefresh: _loadRequests,
           child: _isLoading
               ? const Center(child: CircularProgressIndicator())
               : _errorMessage != null
-                  ? Center(
-                      child: Padding(
-                        padding: const EdgeInsets.all(24),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
+                  ? ListView(
+                      padding: const EdgeInsets.all(24),
+                      children: [
+                        const SizedBox(height: 80),
+                        Icon(Icons.error_outline, size: 64, color: AppColors.error),
+                        const SizedBox(height: 16),
+                        Text(
+                          _errorMessage!,
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(color: AppColors.textSecondary),
+                        ),
+                        const SizedBox(height: 20),
+                        ElevatedButton(
+                          onPressed: _loadRequests,
+                          child: const Text('Retry'),
+                        ),
+                      ],
+                    )
+                  : _requests.isEmpty
+                      ? ListView(
+                          physics: const AlwaysScrollableScrollPhysics(),
+                          children: const [
+                            SizedBox(height: 160),
                             Icon(
-                              Icons.error_outline,
-                              size: 64,
-                              color: Colors.red.shade400,
+                              Icons.local_shipping_outlined,
+                              size: 72,
+                              color: Color(0xFFD1D5DB),
                             ),
-                            const SizedBox(height: 12),
-                            Text(
-                              _errorMessage!,
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                fontSize: 15,
-                                color: Colors.grey.shade700,
+                            SizedBox(height: 16),
+                            Center(
+                              child: Text(
+                                'No pending requests',
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w700,
+                                  color: AppColors.textPrimary,
+                                ),
                               ),
                             ),
-                            const SizedBox(height: 20),
-                            OutlinedButton(
-                              onPressed: _loadRequests,
-                              child: const Text('Retry'),
+                            SizedBox(height: 6),
+                            Center(
+                              child: Text(
+                                'When shippers book your trip, requests will appear here.',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  color: AppColors.textSecondary,
+                                ),
+                                textAlign: TextAlign.center,
+                              ),
                             ),
                           ],
+                        )
+                      : ListView.separated(
+                          physics: const AlwaysScrollableScrollPhysics(),
+                          padding: const EdgeInsets.all(16),
+                          itemCount: _requests.length,
+                          separatorBuilder: (_, __) => const SizedBox(height: 12),
+                          itemBuilder: (context, index) {
+                            final request = _requests[index];
+                            final isAcceptLoading = _loadingShipmentId == request.id && _loadingAction == 'accept';
+                            final isRejectLoading = _loadingShipmentId == request.id && _loadingAction == 'reject';
+
+                            return _RequestCard(
+                              request: request,
+                              isAcceptLoading: isAcceptLoading,
+                              isRejectLoading: isRejectLoading,
+                              onAccept: request.status == 'PENDING' ? () => _acceptRequest(request) : null,
+                              onReject: request.status == 'PENDING' ? () => _rejectRequest(request) : null,
+                            );
+                          },
                         ),
-                      ),
-                    )
-                  : RefreshIndicator(
-                      onRefresh: _loadRequests,
-                      child: _requests.isEmpty
-                          ? ListView(
-                              physics: const AlwaysScrollableScrollPhysics(),
-                              children: const [
-                                SizedBox(height: 120),
-                                EmptyState(
-                                  message: 'No incoming requests',
-                                  icon: Icons.inbox_outlined,
-                                ),
-                              ],
-                            )
-                          : ListView.separated(
-                              physics: const AlwaysScrollableScrollPhysics(),
-                              padding: const EdgeInsets.all(16),
-                              itemCount: _requests.length,
-                              separatorBuilder: (_, __) => const SizedBox(height: 12),
-                              itemBuilder: (context, index) {
-                                final request = _requests[index];
-                                return _RequestCard(
-                                  request: request,
-                                  isAcceptLoading: _loadingShipmentId == request.id &&
-                                      _loadingAction == 'accept',
-                                  isRejectLoading: _loadingShipmentId == request.id &&
-                                      _loadingAction == 'reject',
-                                  onAccept: request.status == 'PENDING'
-                                      ? () => _acceptRequest(request)
-                                      : null,
-                                  onReject: request.status == 'PENDING'
-                                      ? () => _rejectRequest(request)
-                                      : null,
-                                );
-                              },
-                            ),
-                    ),
         ),
       ),
     );
@@ -204,134 +205,219 @@ class _RequestCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final cargoMeta = _cargoMeta(request.cargoCategory);
+    final cargoIcon = _cargoIcon(request.cargoCategory);
 
-    return Card(
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: Text(
-                    '${request.pickupLocation} → ${request.dropoffLocation}',
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
-                      color: Color(0xFF173B2F),
-                    ),
-                  ),
-                ),
-                StatusChip(status: request.status),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Wrap(
-              spacing: 16,
-              runSpacing: 8,
-              children: [
-                _InfoChip(label: 'Weight', value: '${request.weight.toStringAsFixed(1)} kg'),
-                _InfoChip(label: 'Volume', value: '${request.volume.toStringAsFixed(1)} cu ft'),
-                _CargoChip(icon: cargoMeta.icon, label: cargoMeta.label),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Text(
-              '₹${(request.price ?? 0).toStringAsFixed(2)}',
-              style: const TextStyle(
-                fontSize: 22,
-                fontWeight: FontWeight.w800,
-                color: Color(0xFF1D9E75),
-              ),
-            ),
-            if (request.status == 'PENDING') ...[
-              const SizedBox(height: 16),
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.border),
+        boxShadow: const [
+          BoxShadow(
+            color: AppColors.shadow,
+            blurRadius: 10,
+            offset: Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header: ID and status
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
               Row(
                 children: [
-                  Expanded(
-                    child: OutlinedButton(
-                      onPressed: isRejectLoading ? null : onReject,
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: Colors.red,
-                        side: const BorderSide(color: Colors.red),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14),
-                        ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF3F4F6),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Text(
+                      '#${request.id}',
+                      style: const TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.textSecondary,
+                        fontFamily: 'monospace',
                       ),
-                      child: isRejectLoading
-                          ? const SizedBox(
-                              width: 18,
-                              height: 18,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                valueColor: AlwaysStoppedAnimation<Color>(Colors.red),
-                              ),
-                            )
-                          : const Text('Reject'),
                     ),
                   ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: ElevatedButton(
-                      onPressed: isAcceptLoading ? null : onAccept,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF1D9E75),
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14),
-                        ),
-                      ),
-                      child: isAcceptLoading
-                          ? const SizedBox(
-                              width: 18,
-                              height: 18,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                              ),
-                            )
-                          : const Text('Accept'),
+                  const SizedBox(width: 8),
+                  const Text(
+                    'Just now', // Standard mock time
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: AppColors.textSecondary,
                     ),
                   ),
                 ],
               ),
+              StatusChip(status: request.status),
             ],
+          ),
+          const SizedBox(height: 16),
+
+          // Route with vertical lines
+          Row(
+            children: [
+              Column(
+                children: [
+                  const Icon(Icons.circle, size: 8, color: AppColors.primary),
+                  Container(
+                    width: 2,
+                    height: 20,
+                    color: Colors.grey.shade300,
+                  ),
+                  const Icon(Icons.location_on, size: 12, color: AppColors.orange),
+                ],
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      request.pickupLocation,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.textPrimary,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 10),
+                    Text(
+                      request.dropoffLocation,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.textPrimary,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          const Divider(height: 1, color: AppColors.border),
+          const SizedBox(height: 12),
+
+          // Cargo details & Price
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Expanded(
+                child: Wrap(
+                  spacing: 10,
+                  runSpacing: 6,
+                  children: [
+                    _CargoChip(
+                      icon: cargoIcon,
+                      label: request.cargoCategory,
+                    ),
+                    _CargoChip(
+                      icon: Icons.fitness_center_outlined,
+                      label: '${request.weight.toStringAsFixed(0)} kg',
+                    ),
+                    _CargoChip(
+                      icon: Icons.grid_3x3_outlined,
+                      label: '${request.volume.toStringAsFixed(1)} m³',
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 10),
+              Text(
+                '₹${(request.price ?? 0.0).toStringAsFixed(0)}',
+                style: const TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w800,
+                  color: AppColors.textPrimary,
+                ),
+              ),
+            ],
+          ),
+
+          if (request.status == 'PENDING') ...[
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                // Decline Button
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: isRejectLoading ? null : onReject,
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppColors.error,
+                      side: const BorderSide(color: AppColors.error, width: 1.5),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      minimumSize: const Size(0, 48),
+                    ),
+                    child: isRejectLoading
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              valueColor: AlwaysStoppedAnimation<Color>(AppColors.error),
+                            ),
+                          )
+                        : const Text('Decline'),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                // Accept Button
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: isAcceptLoading ? null : onAccept,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      minimumSize: const Size(0, 48),
+                    ),
+                    child: isAcceptLoading
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                            ),
+                          )
+                        : const Text('Accept'),
+                  ),
+                ),
+              ],
+            ),
           ],
-        ),
+        ],
       ),
     );
   }
 
-  _CargoMeta _cargoMeta(String cargoCategory) {
-    switch (cargoCategory.toLowerCase()) {
+  IconData _cargoIcon(String category) {
+    switch (category.toLowerCase()) {
       case 'fragile':
-        return const _CargoMeta(Icons.warning_amber_outlined, 'Fragile');
+        return Icons.warning_amber_outlined;
       case 'perishable':
-        return const _CargoMeta(Icons.eco_outlined, 'Perishable');
+        return Icons.eco_outlined;
+      case 'electronics':
+        return Icons.devices_outlined;
       default:
-        return const _CargoMeta(Icons.inventory_2_outlined, 'General');
+        return Icons.inventory_2_outlined;
     }
-  }
-}
-
-class _InfoChip extends StatelessWidget {
-  const _InfoChip({required this.label, required this.value});
-
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    return Chip(
-      label: Text('$label: $value'),
-      backgroundColor: Colors.grey.shade100,
-      side: BorderSide(color: Colors.grey.shade300),
-    );
   }
 }
 
@@ -343,18 +429,27 @@ class _CargoChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Chip(
-      avatar: Icon(icon, size: 18, color: const Color(0xFF1D9E75)),
-      label: Text(label),
-      backgroundColor: Colors.grey.shade100,
-      side: BorderSide(color: Colors.grey.shade300),
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF3F4F6),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 12, color: AppColors.primary),
+          const SizedBox(width: 4),
+          Text(
+            label,
+            style: const TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w600,
+              color: AppColors.textSecondary,
+            ),
+          ),
+        ],
+      ),
     );
   }
-}
-
-class _CargoMeta {
-  const _CargoMeta(this.icon, this.label);
-
-  final IconData icon;
-  final String label;
 }

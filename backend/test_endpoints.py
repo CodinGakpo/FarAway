@@ -22,24 +22,13 @@ def test_freightshare_demo_flow():
     print(f"  - Root response: {root_resp.json()}")
 
     print("\n==============================================")
-    # 2. Driver Registration and Login
-    print("👤 Registering Driver...")
-    driver_reg_resp = client.post("/auth/register", json={
+    # 2. Driver Login / Registration
+    print("🔑 Logging in/Registering Driver...")
+    driver_login_resp = client.post("/auth/login", json={
+        "id": "driver_arjun",
         "email": "driver@freightshare.com",
-        "password": "driverpassword123",
         "role": "driver",
         "name": "Arjun Kumar"
-    })
-    if driver_reg_resp.status_code == 400 and "already registered" in driver_reg_resp.json().get("detail", ""):
-        print("  - Driver already registered. Proceeding to login.")
-    else:
-        assert driver_reg_resp.status_code == 201, f"Driver reg failed: {driver_reg_resp.text}"
-        print(f"  - Driver registered successfully: {driver_reg_resp.json()['email']}")
-
-    print("🔑 Logging in Driver...")
-    driver_login_resp = client.post("/auth/login", json={
-        "email": "driver@freightshare.com",
-        "password": "driverpassword123"
     })
     assert driver_login_resp.status_code == 200, f"Driver login failed: {driver_login_resp.text}"
     driver_token = driver_login_resp.json()["access_token"]
@@ -61,27 +50,16 @@ def test_freightshare_demo_flow():
     trip_id = trip_data["id"]
     print(f"  - Trip Created successfully! ID: {trip_id}")
     print(f"    Origin: {trip_data['origin']} -> Destination: {trip_data['destination']}")
-    print(f"    Capacities: Max Weight={trip_data['max_weight_capacity']}kg, Max Volume={trip_data['max_volume_capacity']} cu ft")
+    print(f"    Capacities: Max Weight={trip_data['maxWeight']}kg, Max Volume={trip_data['maxVolume']} cu ft")
 
     print("\n==============================================")
-    # 4. Customer Registration and Login
-    print("👤 Registering Customer...")
-    customer_reg_resp = client.post("/auth/register", json={
+    # 4. Customer Login / Registration
+    print("🔑 Logging in/Registering Customer...")
+    customer_login_resp = client.post("/auth/login", json={
+        "id": "customer_niranjan",
         "email": "customer@freightshare.com",
-        "password": "customerpassword123",
         "role": "customer",
         "name": "Niranjan Vijay"
-    })
-    if customer_reg_resp.status_code == 400 and "already registered" in customer_reg_resp.json().get("detail", ""):
-        print("  - Customer already registered. Proceeding to login.")
-    else:
-        assert customer_reg_resp.status_code == 201, f"Customer reg failed: {customer_reg_resp.text}"
-        print(f"  - Customer registered: {customer_reg_resp.json()['email']}")
-
-    print("🔑 Logging in Customer...")
-    customer_login_resp = client.post("/auth/login", json={
-        "email": "customer@freightshare.com",
-        "password": "customerpassword123"
     })
     assert customer_login_resp.status_code == 200, f"Customer login failed: {customer_login_resp.text}"
     customer_token = customer_login_resp.json()["access_token"]
@@ -139,10 +117,10 @@ def test_freightshare_demo_flow():
     print("🔍 Verifying Trip Remaining Capacities...")
     check_trip_resp = client.get(f"/trips/{trip_id}", headers=driver_headers)
     trip_check = check_trip_resp.json()
-    print(f"  - Remaining Weight: {trip_check['remaining_weight_capacity']}kg (Expected: 800.0kg)")
-    print(f"  - Remaining Volume: {trip_check['remaining_volume_capacity']} cu ft (Expected: 40.0 cu ft)")
-    assert trip_check["remaining_weight_capacity"] == 800.0
-    assert trip_check["remaining_volume_capacity"] == 40.0
+    print(f"  - Remaining Weight: {trip_check['remainingWeight']}kg (Expected: 800.0kg)")
+    print(f"  - Remaining Volume: {trip_check['remainingVolume']} cu ft (Expected: 40.0 cu ft)")
+    assert trip_check["remainingWeight"] == 800.0
+    assert trip_check["remainingVolume"] == 40.0
 
     print("\n==============================================")
     # 8. Driver Progresses Shipment to PICKED_UP
