@@ -64,7 +64,7 @@ class _CreateShipmentScreenState extends State<CreateShipmentScreen> {
       _log('✅ Found Trip: ${trip.tripId} (Distance: ${trip.baseDistanceKm}km)');
 
       // 2. Niranjan's AI Agent Evaluation
-      _log('🤖 Step 2: Running Niranjan\\'s AI Agent Evaluation...');
+      _log("🤖 Step 2: Running Niranjan's AI Agent Evaluation...");
       
       final evalResponse = await _api.evaluateShipment(
         trip.tripId,

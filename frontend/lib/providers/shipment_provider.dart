@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import '../models/location_point.dart';
 import '../models/shipment_draft.dart';
+import '../models/trip.dart';
 import '../models/truck_option.dart';
 
 class ShipmentProvider extends ChangeNotifier {
@@ -45,6 +46,11 @@ class ShipmentProvider extends ChangeNotifier {
 
   void selectTruck(TruckOption truck) {
     _draft = _draft.copyWith(selectedTruck: truck);
+    notifyListeners();
+  }
+
+  void setSelectedTrip(Trip trip) {
+    _draft = _draft.copyWith(selectedTripId: int.parse(trip.id));
     notifyListeners();
   }
 

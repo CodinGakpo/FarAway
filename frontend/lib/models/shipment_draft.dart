@@ -15,6 +15,7 @@ class ShipmentDraft {
   final double declaredValue;
   final String specialInstructions;
   final TruckOption? selectedTruck;
+  final int? selectedTripId;
 
   const ShipmentDraft({
     this.pickup,
@@ -28,6 +29,7 @@ class ShipmentDraft {
     this.declaredValue = 0,
     this.specialInstructions = '',
     this.selectedTruck,
+    this.selectedTripId,
   });
 
   double get volumeCm3 => lengthCm * widthCm * heightCm;
@@ -40,8 +42,9 @@ class ShipmentDraft {
   double get durationMin => distanceKm > 0 ? distanceKm * 2.4 : 0;
 
   double get estimatedPrice {
-    if (selectedTruck == null) return 0;
-    return selectedTruck!.estimatedTotal(distanceKm);
+    if (selectedTruck != null) return selectedTruck!.estimatedTotal(distanceKm);
+    if (distanceKm > 0) return (distanceKm * 15 + 800).ceilToDouble();
+    return 0;
   }
 
   static double _haversineKm(LatLng a, LatLng b) {
@@ -70,6 +73,7 @@ class ShipmentDraft {
     double? declaredValue,
     String? specialInstructions,
     TruckOption? selectedTruck,
+    int? selectedTripId,
   }) =>
       ShipmentDraft(
         pickup: pickup ?? this.pickup,
@@ -83,5 +87,6 @@ class ShipmentDraft {
         declaredValue: declaredValue ?? this.declaredValue,
         specialInstructions: specialInstructions ?? this.specialInstructions,
         selectedTruck: selectedTruck ?? this.selectedTruck,
+        selectedTripId: selectedTripId ?? this.selectedTripId,
       );
 }

@@ -13,7 +13,7 @@ router = APIRouter(
     tags=["Shipments"]
 )
 
-customer_only = RoleChecker(["customer"])
+customer_only = RoleChecker(["customer", "shipper"])
 driver_only = RoleChecker(["driver"])
 
 @router.post("", response_model=ShipmentResponse, status_code=status.HTTP_201_CREATED)

@@ -270,17 +270,17 @@ class ApiService {
   }
 
   Future<void> acceptRequest(String shipmentId) async {
-    final response = await _post(
-      '${AppConstants.BOOKINGS}/$shipmentId/accept',
-      {},
+    final response = await _patch(
+      '${AppConstants.SHIPMENTS}/$shipmentId/status',
+      {'status': 'ACCEPTED'},
     );
     _handleResponse(response, (_) => null);
   }
 
   Future<void> rejectRequest(String shipmentId) async {
-    final response = await _post(
-      '${AppConstants.BOOKINGS}/$shipmentId/reject',
-      {},
+    final response = await _patch(
+      '${AppConstants.SHIPMENTS}/$shipmentId/status',
+      {'status': 'REJECTED'},
     );
     _handleResponse(response, (_) => null);
   }
@@ -294,6 +294,7 @@ class ApiService {
   }
 
   Future<ShipmentRequest> createShipment(
+    String tripId,
     String pickupLocation,
     String dropoffLocation,
     double weight,
@@ -303,34 +304,58 @@ class ApiService {
     final response = await _post(
       AppConstants.SHIPMENTS,
       {
+        'tripId': int.parse(tripId),
         'pickupLocation': pickupLocation,
         'dropoffLocation': dropoffLocation,
         'weight': weight,
-        'volume': volume,
+        'volume': volume > 0 ? volume : 0.001,
         'cargoCategory': cargoCategory,
       },
     );
 
     return _handleResponse(response, (body) {
+      if (body is Map<String, dynamic>) return ShipmentRequest.fromJson(body);
       final data =
           _extractMap(body, ['shipment', 'data'], entityName: 'shipment');
       return ShipmentRequest.fromJson(data);
     });
   }
 
-  Future<ShipmentRequest> confirmBooking(String shipmentId) async {
+  /// Confirms a DRAFT shipment → moves it to PENDING status.
+  /// Calls POST /shipments/{id}/confirm.
+  Future<ShipmentRequest> confirmShipment(String shipmentId) async {
     final response = await _post(
-      '${AppConstants.BOOKINGS}/$shipmentId/confirm',
+      '${AppConstants.SHIPMENTS}/$shipmentId/confirm',
       {},
     );
 
     return _handleResponse(response, (body) {
+      if (body is Map<String, dynamic>) return ShipmentRequest.fromJson(body);
       final data = _extractMap(
         body,
-        ['shipment', 'booking', 'data'],
-        entityName: 'booking',
+        ['shipment', 'data'],
+        entityName: 'shipment',
       );
       return ShipmentRequest.fromJson(data);
+    });
+  }
+
+  /// Returns all ACTIVE trips — used by shippers to browse available freight routes.
+  Future<List<Trip>> getActiveTrips() async {
+    final response = await _get('${AppConstants.TRIPS}?status=ACTIVE');
+
+    return _handleResponse(response, (body) {
+      if (body is List) {
+        return body
+            .map((item) =>
+                Trip.fromJson(Map<String, dynamic>.from(item as Map)))
+            .toList();
+      }
+      final list = _extractList(body, ['trips', 'data']);
+      return list
+          .map((item) =>
+              Trip.fromJson(Map<String, dynamic>.from(item as Map)))
+          .toList();
     });
   }
 

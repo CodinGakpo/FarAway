@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../core/app_theme.dart';
 import '../../models/shipment_request.dart';
@@ -15,6 +16,7 @@ class IncomingRequestsScreen extends StatefulWidget {
 
 class _IncomingRequestsScreenState extends State<IncomingRequestsScreen> {
   final ApiService _apiService = ApiService();
+  Timer? _pollTimer;
 
   List<ShipmentRequest> _requests = const [];
   bool _isLoading = true;
@@ -26,6 +28,29 @@ class _IncomingRequestsScreenState extends State<IncomingRequestsScreen> {
   void initState() {
     super.initState();
     _loadRequests();
+    // Poll every 15 seconds while the screen is active
+    _pollTimer = Timer.periodic(
+      const Duration(seconds: 15),
+      (_) => _silentRefresh(),
+    );
+  }
+
+  @override
+  void dispose() {
+    _pollTimer?.cancel();
+    super.dispose();
+  }
+
+  /// Refresh without showing the full loading spinner (background poll).
+  Future<void> _silentRefresh() async {
+    if (!mounted || _loadingShipmentId != null) return;
+    try {
+      final requests = await _apiService.getIncomingRequests(widget.tripId);
+      if (!mounted) return;
+      setState(() => _requests = requests);
+    } catch (_) {
+      // Silent — don't surface polling errors to the user
+    }
   }
 
   Future<void> _loadRequests() async {

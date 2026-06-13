@@ -1,8 +1,8 @@
-import 'dart:math';
 import 'package:flutter/foundation.dart';
 import '../models/booking.dart';
 import '../models/shipment_draft.dart';
 import '../models/shipment_history_item.dart';
+import '../services/api_service.dart';
 import '../services/mock_data_service.dart';
 
 class BookingProvider extends ChangeNotifier {
@@ -15,15 +15,54 @@ class BookingProvider extends ChangeNotifier {
       _activeBooking != null && _activeBooking!.status.isActive;
   List<ShipmentHistoryItem> get history => List.unmodifiable(_history);
 
+  /// Creates a real shipment via the backend:
+  /// 1. POST /shipments  — creates + runs AI evaluation
+  /// 2. POST /shipments/{id}/confirm — moves DRAFT → PENDING
   Future<Booking> createBooking(ShipmentDraft draft) async {
-    await Future.delayed(const Duration(milliseconds: 1600));
+    if (draft.selectedTripId == null) {
+      throw Exception('No trip selected. Please select a freight trip first.');
+    }
+    if (draft.pickup == null || draft.drop == null) {
+      throw Exception('Pickup and drop locations are required.');
+    }
+    if (draft.weightKg <= 0) {
+      throw Exception('Cargo weight must be greater than zero.');
+    }
+
+    final api = ApiService();
+
+    // Step 1: Create shipment — backend runs AI feasibility + pricing
+    final shipment = await api.createShipment(
+      draft.selectedTripId.toString(),
+      draft.pickup!.address,
+      draft.drop!.address,
+      draft.weightKg,
+      draft.volumeCm3 / 1000000, // cm³ → m³
+      draft.cargoCategory.isNotEmpty ? draft.cargoCategory : 'general',
+    );
+
+    // Step 2: Check if AI determined this route is feasible
+    if (!shipment.feasibilityStatus) {
+      final reason = shipment.feasibilityTrace
+              ?.split('\n')
+              .where((l) => l.trim().isNotEmpty)
+              .take(2)
+              .join(' ') ??
+          'Route or capacity check failed.';
+      throw Exception(reason);
+    }
+
+    // Step 3: Confirm — moves status DRAFT → PENDING
+    final confirmed = await api.confirmShipment(shipment.id);
+
     final booking = Booking(
-      id: 'FB${1000 + Random().nextInt(8999)}',
+      id: confirmed.id,
       draft: draft,
       status: BookingStatus.confirmed,
       createdAt: DateTime.now(),
-      finalPrice: draft.estimatedPrice,
+      finalPrice: confirmed.price ?? shipment.price ?? 0.0,
     );
+
     _activeBooking = booking;
     notifyListeners();
     return booking;
@@ -55,7 +94,7 @@ class BookingProvider extends ChangeNotifier {
           date: b.createdAt,
           price: b.finalPrice,
           status: 'Delivered',
-          truckType: b.draft.selectedTruck?.type ?? 'Truck',
+          truckType: b.draft.selectedTruck?.type ?? 'Freight Truck',
           cargoName: b.draft.cargoName.isNotEmpty
               ? b.draft.cargoName
               : 'Cargo',
