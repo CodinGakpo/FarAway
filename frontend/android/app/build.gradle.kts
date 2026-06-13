@@ -1,6 +1,3 @@
-import java.util.Properties
-import java.io.FileInputStream
-
 plugins {
     id("com.android.application")
     // START: FlutterFire Configuration
@@ -10,6 +7,9 @@ plugins {
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
 }
+
+import java.util.Properties
+import java.io.FileInputStream
 
 val envFile = project.rootProject.file("../.env")
 val envProps = Properties()
