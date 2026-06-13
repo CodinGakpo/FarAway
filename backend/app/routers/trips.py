@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from typing import List, Optional
 
 from app.database import get_db, is_sqlite
-from app.models import Trip, User
+from app.models import Trip, User, Shipment
 from app.schemas import TripCreate, TripResponse, ShipmentResponse
 from app.auth import get_current_user, RoleChecker
 from app.services.geo_service import GeoService
@@ -146,6 +146,37 @@ def get_trip_history(
         res.route_coordinates = get_trip_coordinates(trip.id, db)
         results.append(res)
     return results
+
+@router.post("/{trip_id}/complete", response_model=TripResponse)
+def complete_trip(
+    trip_id: int, 
+    db: Session = Depends(get_db), 
+    current_user: User = Depends(driver_only)
+):
+    trip = db.query(Trip).filter(
+        Trip.id == trip_id, 
+        Trip.driver_id == current_user.id
+    ).first()
+    
+    if not trip:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Trip with ID {trip_id} not found or unauthorized"
+        )
+        
+    trip.status = "COMPLETED"
+    
+    # Mark all active shipments as DELIVERED if they were accepted or picked up
+    for shipment in db.query(Shipment).filter(Shipment.trip_id == trip_id).all():
+        if shipment.status in ["ACCEPTED", "PICKED_UP", "PENDING"]:
+            shipment.status = "DELIVERED"
+            
+    db.commit()
+    db.refresh(trip)
+    
+    res = TripResponse.from_orm(trip)
+    res.route_coordinates = get_trip_coordinates(trip.id, db)
+    return res
 
 
 @router.get("/{trip_id}", response_model=TripResponse)

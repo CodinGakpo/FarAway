@@ -99,6 +99,33 @@ class _ActiveTripDashboardState extends State<ActiveTripDashboard> {
     }
   }
 
+  bool _isCompleting = false;
+
+  Future<void> _completeTrip() async {
+    setState(() {
+      _isCompleting = true;
+    });
+
+    try {
+      await _apiService.completeTrip(widget.trip.id);
+      if (!mounted) return;
+      Navigator.of(context).pop(); // Go back to Home
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(error.toString().replaceFirst('Exception: ', '')),
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isCompleting = false;
+        });
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     // Volume calculation fallback using total capacity ratios
@@ -209,6 +236,37 @@ class _ActiveTripDashboardState extends State<ActiveTripDashboard> {
                     );
                   },
                 ),
+              const SizedBox(height: 24),
+              SizedBox(
+                width: double.infinity,
+                height: 52,
+                child: ElevatedButton(
+                  onPressed: _isCompleting ? null : _completeTrip,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  child: _isCompleting
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                          ),
+                        )
+                      : const Text(
+                          'Complete Trip',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                ),
+              ),
               const SizedBox(height: 40),
             ],
           ),

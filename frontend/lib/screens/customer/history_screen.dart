@@ -25,6 +25,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
   Future<void> _loadHistory() async {
     try {
       final items = await ApiService().getShipmentHistory();
+      
       if (mounted) {
         setState(() {
           _history = items;

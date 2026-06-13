@@ -111,6 +111,8 @@ class ShipmentCreate(BaseModel):
     weight: float = Field(..., gt=0)
     volume: float = Field(..., gt=0)
     cargo_category: str = Field(..., alias="cargoCategory")
+    estimated_price: Optional[float] = Field(None, alias="estimatedPrice")
+    feasibility_trace: Optional[str] = Field(None, alias="feasibilityTrace")
 
     class Config:
         populate_by_name = True

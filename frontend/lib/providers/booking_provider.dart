@@ -16,11 +16,13 @@ class BookingProvider extends ChangeNotifier {
   Future<Booking> createBooking(ShipmentDraft draft) async {
     final shipment = await ApiService().createShipment(
       draft.selectedTruck!.id,
-      draft.pickup?.address ?? '',
-      draft.drop?.address ?? '',
+      draft.pickup?.shortAddress ?? '',
+      draft.drop?.shortAddress ?? '',
       draft.weightKg,
       draft.volumeCm3 / 1000000,
       draft.cargoCategory,
+      estimatedPrice: draft.estimatedPrice,
+      feasibilityTrace: draft.selectedTruck!.description,
     );
 
     await ApiService().confirmBooking(shipment.id);

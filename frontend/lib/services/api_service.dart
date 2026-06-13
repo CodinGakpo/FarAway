@@ -260,6 +260,14 @@ class ApiService {
     });
   }
 
+  Future<Trip> completeTrip(String tripId) async {
+    final response = await _post('${AppConstants.TRIPS}/$tripId/complete', {});
+    return _handleResponse(response, (body) {
+      final m = body is Map<String, dynamic> ? body : Map<String, dynamic>.from(body as Map);
+      return Trip.fromJson(m);
+    });
+  }
+
   Future<List<ShipmentHistoryItem>> getShipmentHistory() async {
     final response = await _get(AppConstants.SHIPMENTS);
 
@@ -340,8 +348,10 @@ class ApiService {
     String dropoffLocation,
     double weight,
     double volume,
-    String cargoCategory,
-  ) async {
+    String cargoCategory, {
+    double? estimatedPrice,
+    String? feasibilityTrace,
+  }) async {
     final response = await _post(
       AppConstants.SHIPMENTS,
       {
@@ -351,6 +361,8 @@ class ApiService {
         'weight': weight,
         'volume': volume,
         'cargo_category': cargoCategory,
+        if (estimatedPrice != null) 'estimatedPrice': estimatedPrice,
+        if (feasibilityTrace != null) 'feasibilityTrace': feasibilityTrace,
       },
     );
 

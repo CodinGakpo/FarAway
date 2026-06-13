@@ -288,8 +288,8 @@ class FreightShareAgentService:
         if aws_configured:
             trace_steps.append("\n🤖 [Agent LLM Thought Process - AWS Bedrock Live Mode]:")
             trace_steps.append(
-                "Thought: Based on the structured outputs from my tools, I have confirmed that the route Vellore -> Bangalore "
-                "fits directly on the primary NH48 transit highway route of the truck (Chennai -> Bangalore). The truck has "
+                f"Thought: Based on the structured outputs from my tools, I have confirmed that the route {pickup} -> {dropoff} "
+                f"fits directly on the primary transit highway route of the truck ({trip_origin} -> {trip_destination}). The truck has "
                 f"ample capacity (needed: {weight}kg, {volume} cu ft; available: {rem_weight}kg, {rem_volume} cu ft). "
                 f"The pricing calculation includes the base handling fee and the {cargo_category} cargo handling surcharge, "
                 f"summing up to exactly ₹{price:.2f}. I will now present this option to the customer for confirmation."
@@ -297,10 +297,10 @@ class FreightShareAgentService:
         else:
             trace_steps.append("\n🤖 [Agent LLM Thought Process - Local Agent Mode]:")
             trace_steps.append(
-                "Thought: The requested route from Vellore to Bangalore falls directly along the driver's route from Chennai "
-                "to Bangalore. The weight and volume capacities check out successfully against the truck's remaining volume. "
-                "I have calculated the route pricing including the fragile cargo handling surcharge. "
-                "Everything is verified. The shipment request is confirmed as feasible."
+                f"Thought: The requested route from {pickup} to {dropoff} falls safely along the driver's "
+                f"active route from {trip_origin} to {trip_destination}. The weight and volume capacities check out "
+                f"successfully against the truck's remaining volume. I have calculated the route pricing including the "
+                f"{cargo_category} cargo handling surcharge (if any). Everything is verified. The shipment request is confirmed as feasible."
             )
 
         full_trace = "\n".join(trace_steps)

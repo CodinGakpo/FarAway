@@ -37,18 +37,25 @@ def create_shipment_request(
             detail="Cannot book shipment on an inactive or completed trip"
         )
 
-    # 3. Invoke AI Agent to evaluate feasibility and calculate pricing
-    agent_result = FreightShareAgentService.evaluate_shipment(
-        pickup=shipment_in.pickup_location,
-        dropoff=shipment_in.dropoff_location,
-        weight=shipment_in.weight,
-        volume=shipment_in.volume,
-        cargo_category=shipment_in.cargo_category,
-        trip_origin=trip.origin_name,
-        trip_destination=trip.destination_name,
-        rem_weight=trip.remaining_weight_capacity,
-        rem_volume=trip.remaining_volume_capacity
-    )
+    # 3. Use client estimates if provided, otherwise invoke AI Agent
+    if shipment_in.estimated_price is not None and shipment_in.feasibility_trace is not None:
+        agent_result = {
+            "feasible": True,
+            "price": shipment_in.estimated_price,
+            "trace": shipment_in.feasibility_trace
+        }
+    else:
+        agent_result = FreightShareAgentService.evaluate_shipment(
+            pickup=shipment_in.pickup_location,
+            dropoff=shipment_in.dropoff_location,
+            weight=shipment_in.weight,
+            volume=shipment_in.volume,
+            cargo_category=shipment_in.cargo_category,
+            trip_origin=trip.origin_name,
+            trip_destination=trip.destination_name,
+            rem_weight=trip.remaining_weight_capacity,
+            rem_volume=trip.remaining_volume_capacity
+        )
 
     # 4. Create the draft shipment entry in the database
     db_shipment = Shipment(
