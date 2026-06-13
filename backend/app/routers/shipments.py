@@ -16,14 +16,14 @@ router = APIRouter(
     tags=["Shipments"]
 )
 
-shipper_only = RoleChecker(["shipper"])
+customer_only = RoleChecker(["customer", "shipper"])
 driver_only = RoleChecker(["driver"])
 
 @router.post("", response_model=ShipmentResponse, status_code=status.HTTP_201_CREATED)
 def create_shipment_request(
     shipment_in: ShipmentCreate, 
     db: Session = Depends(get_db), 
-    current_user: User = Depends(shipper_only)
+    current_user: User = Depends(customer_only)
 ):
     logger.info(
         "shipment_create_request | user_id=%s trip_id=%s pickup=%r dropoff=%r "
@@ -98,7 +98,7 @@ def create_shipment_request(
 def confirm_shipment_booking(
     shipment_id: int, 
     db: Session = Depends(get_db), 
-    current_user: User = Depends(shipper_only)
+    current_user: User = Depends(customer_only)
 ):
     shipment = db.query(Shipment).filter(Shipment.id == shipment_id).first()
     if not shipment:
@@ -249,8 +249,8 @@ def list_shipments(
     query = db.query(Shipment)
 
     # Filter restrictions:
-    # A customer should only see their own shipments, unless they are a driver looking at their trip's shipments.
-    if current_user.role == "shipper":
+    # A customer/shipper should only see their own shipments.
+    if current_user.role in ["customer", "shipper"]:
         query = query.filter(Shipment.customer_id == current_user.id)
     elif current_user.role == "driver":
         # A driver should only see shipments for trips they own
