@@ -203,8 +203,8 @@ def list_shipments(
     query = db.query(Shipment)
 
     # Filter restrictions:
-    # A customer should only see their own shipments, unless they are a driver looking at their trip's shipments.
-    if current_user.role == "customer":
+    # A customer/shipper should only see their own shipments.
+    if current_user.role in ["customer", "shipper"]:
         query = query.filter(Shipment.customer_id == current_user.id)
     elif current_user.role == "driver":
         # A driver should only see shipments for trips they own

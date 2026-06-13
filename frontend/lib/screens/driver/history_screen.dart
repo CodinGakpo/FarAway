@@ -139,8 +139,10 @@ class _TripHistoryCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Generate a pseudo-random price for completed trips if not present in schema
-    final mockEarnings = 4500 + (trip.id.hashCode.abs() % 8) * 600;
+    final capacityUsedKg = trip.maxWeight - trip.remainingWeight;
+    final utilizationPct = trip.maxWeight > 0
+        ? (capacityUsedKg / trip.maxWeight * 100).clamp(0, 100)
+        : 0.0;
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -158,7 +160,8 @@ class _TripHistoryCard extends StatelessWidget {
               Row(
                 children: [
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 8, vertical: 4),
                     decoration: BoxDecoration(
                       color: const Color(0xFFF3F4F6),
                       borderRadius: BorderRadius.circular(6),
@@ -197,9 +200,10 @@ class _TripHistoryCard extends StatelessWidget {
                   Container(
                     width: 2,
                     height: 16,
-                    color: Colors.grey.shade300,
+                    color: const Color(0xFFD1D5DB),
                   ),
-                  const Icon(Icons.location_on, size: 12, color: AppColors.orange),
+                  const Icon(Icons.location_on,
+                      size: 12, color: AppColors.orange),
                 ],
               ),
               const SizedBox(width: 12),
@@ -240,26 +244,14 @@ class _TripHistoryCard extends StatelessWidget {
           Row(
             children: [
               _MetaChip(
-                icon: Icons.local_shipping_outlined,
-                label: trip.maxWeight > 2000
-                    ? 'Medium Cargo Truck'
-                    : trip.maxWeight > 1000
-                        ? 'Pickup Truck'
-                        : 'Mini Truck',
+                icon: Icons.scale_outlined,
+                label: '${capacityUsedKg.toStringAsFixed(0)} / '
+                    '${trip.maxWeight.toStringAsFixed(0)} kg',
               ),
               const SizedBox(width: 10),
-              const _MetaChip(
-                icon: Icons.straighten,
-                label: '250 km',
-              ),
-              const Spacer(),
-              Text(
-                '₹$mockEarnings',
-                style: const TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w800,
-                  color: AppColors.textPrimary,
-                ),
+              _MetaChip(
+                icon: Icons.bar_chart_rounded,
+                label: '${utilizationPct.toStringAsFixed(0)}% used',
               ),
             ],
           ),

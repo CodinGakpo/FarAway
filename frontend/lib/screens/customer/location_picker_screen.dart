@@ -1,7 +1,8 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../core/app_theme.dart';
 import '../../models/location_point.dart';
-import '../../services/mock_data_service.dart';
+import '../../services/location_service.dart';
 
 enum _PickerMode { pickup, drop }
 
@@ -24,8 +25,7 @@ class LocationPickerSheet extends StatefulWidget {
         context: context,
         isScrollControlled: true,
         backgroundColor: Colors.transparent,
-        builder: (_) =>
-            const LocationPickerSheet._(mode: _PickerMode.drop),
+        builder: (_) => const LocationPickerSheet._(mode: _PickerMode.drop),
       );
 
   @override
@@ -33,18 +33,43 @@ class LocationPickerSheet extends StatefulWidget {
 }
 
 class _LocationPickerSheetState extends State<LocationPickerSheet> {
-  String _query = '';
+  final _controller = TextEditingController();
+  Timer? _debounce;
 
-  List<LocationPoint> get _locations => widget.mode == _PickerMode.pickup
-      ? MockDataService.pickupLocations
-      : MockDataService.dropLocations;
+  List<LocationResult> _results = const [];
+  bool _isLoading = false;
+  bool _hasSearched = false;
 
-  List<LocationPoint> get _filtered => _query.isEmpty
-      ? _locations
-      : _locations
-          .where((l) =>
-              l.address.toLowerCase().contains(_query.toLowerCase()))
-          .toList();
+  @override
+  void dispose() {
+    _debounce?.cancel();
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _onQueryChanged(String query) {
+    _debounce?.cancel();
+    if (query.trim().length < 2) {
+      setState(() {
+        _results = const [];
+        _isLoading = false;
+        _hasSearched = false;
+      });
+      return;
+    }
+    setState(() => _isLoading = true);
+    _debounce = Timer(const Duration(milliseconds: 400), () => _search(query));
+  }
+
+  Future<void> _search(String query) async {
+    final results = await LocationService.search(query);
+    if (!mounted) return;
+    setState(() {
+      _results = results;
+      _isLoading = false;
+      _hasSearched = true;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -62,13 +87,14 @@ class _LocationPickerSheetState extends State<LocationPickerSheet> {
           children: [
             _Handle(),
             Padding(
-              padding:
-                  const EdgeInsets.fromLTRB(20, 8, 20, 12),
+              padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    isPickup ? 'Select Pickup Location' : 'Select Drop Location',
+                    isPickup
+                        ? 'Select Pickup Location'
+                        : 'Select Drop Location',
                     style: const TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.w700,
@@ -77,16 +103,31 @@ class _LocationPickerSheetState extends State<LocationPickerSheet> {
                   ),
                   const SizedBox(height: 12),
                   TextField(
-                    autofocus: false,
-                    onChanged: (v) => setState(() => _query = v),
+                    controller: _controller,
+                    autofocus: true,
+                    onChanged: _onQueryChanged,
                     decoration: InputDecoration(
-                      hintText: 'Search location...',
-                      prefixIcon: const Icon(Icons.search, size: 20),
-                      suffixIcon: _query.isNotEmpty
+                      hintText: 'Search city or area...',
+                      prefixIcon: _isLoading
+                          ? const Padding(
+                              padding: EdgeInsets.all(12),
+                              child: SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: AppColors.primary,
+                                ),
+                              ),
+                            )
+                          : const Icon(Icons.search, size: 20),
+                      suffixIcon: _controller.text.isNotEmpty
                           ? IconButton(
                               icon: const Icon(Icons.clear, size: 18),
-                              onPressed: () =>
-                                  setState(() => _query = ''),
+                              onPressed: () {
+                                _controller.clear();
+                                _onQueryChanged('');
+                              },
                             )
                           : null,
                     ),
@@ -96,67 +137,99 @@ class _LocationPickerSheetState extends State<LocationPickerSheet> {
             ),
             const Divider(height: 1, color: AppColors.border),
             Expanded(
-              child: ListView.separated(
-                controller: scrollController,
-                padding: const EdgeInsets.symmetric(vertical: 8),
-                itemCount: _filtered.length,
-                separatorBuilder: (_, __) => const Divider(
-                  height: 1,
-                  color: AppColors.border,
-                  indent: 56,
-                ),
-                itemBuilder: (context, i) {
-                  final loc = _filtered[i];
-                  final isCurrent = i == 0 && _query.isEmpty;
-                  return ListTile(
-                    leading: Container(
-                      width: 36,
-                      height: 36,
-                      decoration: BoxDecoration(
-                        color: isCurrent
-                            ? AppColors.primaryLight
-                            : const Color(0xFFF3F4F6),
-                        shape: BoxShape.circle,
-                      ),
-                      child: Icon(
-                        isCurrent
-                            ? Icons.my_location
-                            : isPickup
-                                ? Icons.radio_button_checked
-                                : Icons.location_on,
-                        size: 18,
-                        color: isCurrent
-                            ? AppColors.primary
-                            : isPickup
-                                ? AppColors.primary
-                                : AppColors.orange,
-                      ),
-                    ),
-                    title: Text(
-                      loc.shortAddress,
-                      style: const TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.textPrimary,
-                      ),
-                    ),
-                    subtitle: Text(
-                      loc.address,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: AppColors.textSecondary,
-                      ),
-                    ),
-                    onTap: () => Navigator.of(context).pop(loc),
-                  );
-                },
-              ),
+              child: _buildBody(scrollController, isPickup),
             ),
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildBody(ScrollController scrollController, bool isPickup) {
+    if (!_hasSearched && !_isLoading) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(32),
+          child: Text(
+            'Start typing to search for a city or area.',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: AppColors.textSecondary, fontSize: 14),
+          ),
+        ),
+      );
+    }
+
+    if (_isLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    if (_hasSearched && _results.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.location_off_outlined,
+                  size: 48, color: Color(0xFFD1D5DB)),
+              const SizedBox(height: 12),
+              Text(
+                'No results for "${_controller.text}"',
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                    color: AppColors.textSecondary, fontSize: 14),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return ListView.separated(
+      controller: scrollController,
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      itemCount: _results.length,
+      separatorBuilder: (_, __) => const Divider(
+        height: 1,
+        color: AppColors.border,
+        indent: 56,
+      ),
+      itemBuilder: (context, i) {
+        final result = _results[i];
+        return ListTile(
+          leading: Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+              color: const Color(0xFFF3F4F6),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              isPickup ? Icons.radio_button_checked : Icons.location_on,
+              size: 18,
+              color: isPickup ? AppColors.primary : AppColors.orange,
+            ),
+          ),
+          title: Text(
+            result.shortAddress,
+            style: const TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w600,
+              color: AppColors.textPrimary,
+            ),
+          ),
+          subtitle: Text(
+            result.fullAddress,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              fontSize: 12,
+              color: AppColors.textSecondary,
+            ),
+          ),
+          onTap: () => Navigator.of(context).pop(result.toLocationPoint()),
+        );
+      },
     );
   }
 }
@@ -170,7 +243,7 @@ class _Handle extends StatelessWidget {
             width: 40,
             height: 4,
             decoration: BoxDecoration(
-              color: Colors.grey.shade300,
+              color: const Color(0xFFD1D5DB),
               borderRadius: BorderRadius.circular(2),
             ),
           ),

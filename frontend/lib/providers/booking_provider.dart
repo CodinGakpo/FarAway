@@ -3,17 +3,19 @@ import '../models/booking.dart';
 import '../models/shipment_draft.dart';
 import '../models/shipment_history_item.dart';
 import '../services/api_service.dart';
-import '../services/mock_data_service.dart';
 
 class BookingProvider extends ChangeNotifier {
   Booking? _activeBooking;
-  final List<ShipmentHistoryItem> _history =
-      List.of(MockDataService.history);
+  // In-session archive only: holds the most recently completed booking
+  // so it can appear immediately in the history tab without a refresh.
+  // The authoritative history is fetched live from GET /shipments.
+  final List<ShipmentHistoryItem> _sessionArchive = [];
 
   Booking? get activeBooking => _activeBooking;
   bool get hasActiveBooking =>
       _activeBooking != null && _activeBooking!.status.isActive;
-  List<ShipmentHistoryItem> get history => List.unmodifiable(_history);
+  List<ShipmentHistoryItem> get sessionArchive =>
+      List.unmodifiable(_sessionArchive);
 
   /// Creates a real shipment via the backend:
   /// 1. POST /shipments  — creates + runs AI evaluation
@@ -85,7 +87,7 @@ class BookingProvider extends ChangeNotifier {
     final pickup = b.draft.pickup;
     final drop = b.draft.drop;
     if (pickup != null && drop != null) {
-      _history.insert(
+      _sessionArchive.insert(
         0,
         ShipmentHistoryItem(
           id: b.id,

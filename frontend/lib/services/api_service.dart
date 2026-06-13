@@ -363,9 +363,30 @@ class ApiService {
     final response = await _get('${AppConstants.SHIPMENTS}/$shipmentId');
 
     return _handleResponse(response, (body) {
+      if (body is Map<String, dynamic>) return ShipmentRequest.fromJson(body);
       final data =
           _extractMap(body, ['shipment', 'data'], entityName: 'shipment');
       return ShipmentRequest.fromJson(data);
+    });
+  }
+
+  /// Returns all shipments belonging to the authenticated customer/shipper.
+  /// Calls GET /shipments — backend filters by current_user automatically.
+  Future<List<ShipmentRequest>> getCustomerShipments() async {
+    final response = await _get(AppConstants.SHIPMENTS);
+
+    return _handleResponse(response, (body) {
+      if (body is List) {
+        return body
+            .map((item) => ShipmentRequest.fromJson(
+                Map<String, dynamic>.from(item as Map)))
+            .toList();
+      }
+      final list = _extractList(body, ['shipments', 'data']);
+      return list
+          .map((item) => ShipmentRequest.fromJson(
+              Map<String, dynamic>.from(item as Map)))
+          .toList();
     });
   }
 
