@@ -1,4 +1,4 @@
 #include? "Pods/Target Support Files/Pods-Runner/Pods-Runner.release.xcconfig"
 #include "Generated.xcconfig"
 // Keep in sync with frontend/.env MAPS_API_KEY
-MAPS_API_KEY = AIzaSyBxYf92AEyd8SFtpenUJwgSw9eTZ9YhON0
+MAPS_API_KEY = ${GOOGLE_MAPS_API_KEY}

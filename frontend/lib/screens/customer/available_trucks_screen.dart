@@ -46,22 +46,20 @@ class _AvailableTrucksScreenState extends State<AvailableTrucksScreen> {
 
       for (int i = 0; i < trips.length; i++) {
         final eval = evaluations[i];
-        if (eval.feasible) {
-          final trip = trips[i];
-          viableTrucks.add(TruckOption(
-            id: trip.id,
-            type: 'Cargo Truck', 
-            capacityLabel: '${trip.remainingWeight}kg cap',
-            pickupEta: 'Available',
-            basePrice: eval.price, 
-            pricePerKm: 0,         
-            rating: 4.8,
-            reviewCount: 120,
-            driverName: trip.driverId ?? 'Driver',
-            truckNumber: trip.id.length > 8 ? trip.id.substring(0, 8) : trip.id,
-            description: eval.trace,
-          ));
-        }
+        final trip = trips[i];
+        viableTrucks.add(TruckOption(
+          id: trip.id,
+          type: eval.feasible ? 'Cargo Truck' : 'Cargo Truck (Unfeasible)', 
+          capacityLabel: '${trip.remainingWeight}kg cap',
+          pickupEta: eval.feasible ? 'Available' : 'Unfeasible Route',
+          basePrice: eval.price, 
+          pricePerKm: 0,         
+          rating: 4.8,
+          reviewCount: 120,
+          driverName: trip.driverId ?? 'Driver',
+          truckNumber: trip.id.length > 8 ? trip.id.substring(0, 8) : trip.id,
+          description: eval.trace,
+        ));
       }
 
       if (mounted) {

@@ -44,7 +44,6 @@ class _LiveMapWidgetState extends State<LiveMapWidget> {
 
   void _onMapCreated(GoogleMapController controller) {
     _controller = controller;
-    _controller!.setMapStyle(_mapStyle);
     _fitBounds();
   }
 
@@ -208,22 +207,4 @@ class _LiveMapWidgetState extends State<LiveMapWidget> {
       ),
     );
   }
-
-  // Simplified light map style
-  final String _mapStyle = '''
-  [
-    {
-      "featureType": "poi",
-      "stylers": [
-        { "visibility": "off" }
-      ]
-    },
-    {
-      "featureType": "transit",
-      "stylers": [
-        { "visibility": "off" }
-      ]
-    }
-  ]
-  ''';
 }

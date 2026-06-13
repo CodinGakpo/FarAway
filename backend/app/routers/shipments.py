@@ -13,14 +13,14 @@ router = APIRouter(
     tags=["Shipments"]
 )
 
-customer_only = RoleChecker(["customer"])
+shipper_only = RoleChecker(["shipper"])
 driver_only = RoleChecker(["driver"])
 
 @router.post("", response_model=ShipmentResponse, status_code=status.HTTP_201_CREATED)
 def create_shipment_request(
     shipment_in: ShipmentCreate, 
     db: Session = Depends(get_db), 
-    current_user: User = Depends(customer_only)
+    current_user: User = Depends(shipper_only)
 ):
     # 1. Verify trip exists
     trip = db.query(Trip).filter(Trip.id == shipment_in.trip_id).first()
@@ -75,7 +75,7 @@ def create_shipment_request(
 def confirm_shipment_booking(
     shipment_id: int, 
     db: Session = Depends(get_db), 
-    current_user: User = Depends(customer_only)
+    current_user: User = Depends(shipper_only)
 ):
     shipment = db.query(Shipment).filter(Shipment.id == shipment_id).first()
     if not shipment:
@@ -204,14 +204,14 @@ def list_shipments(
 
     # Filter restrictions:
     # A customer should only see their own shipments, unless they are a driver looking at their trip's shipments.
-    if current_user.role == "customer":
+    if current_user.role == "shipper":
         query = query.filter(Shipment.customer_id == current_user.id)
     elif current_user.role == "driver":
         # A driver should only see shipments for trips they own
         query = query.join(Trip).filter(Trip.driver_id == current_user.id)
 
     # Apply optional queries
-    if customer_id is not None and current_user.role != "customer":
+    if customer_id is not None and current_user.role != "shipper":
         # Only allow filtering other customer IDs if driver
         query = query.filter(Shipment.customer_id == customer_id)
     if trip_id is not None:
@@ -236,7 +236,7 @@ def get_shipment(
         )
     
     # Ownership authorization check
-    if current_user.role == "customer" and shipment.customer_id != current_user.id:
+    if current_user.role == "shipper" and shipment.customer_id != current_user.id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Access denied to this shipment record"
