@@ -36,9 +36,14 @@ class _LocationPickerSheetState extends State<LocationPickerSheet> {
   final _controller = TextEditingController();
   Timer? _debounce;
 
-  List<LocationResult> _results = const [];
+  // Session token for this picker session — covers all autocomplete calls
+  // plus the single Place Details call on selection (one billable session).
+  final String _sessionToken = PlacesService.newSessionToken();
+
+  List<PlacePrediction> _predictions = const [];
   bool _isLoading = false;
   bool _hasSearched = false;
+  bool _fetchingLocation = false;
 
   @override
   void dispose() {
@@ -51,24 +56,66 @@ class _LocationPickerSheetState extends State<LocationPickerSheet> {
     _debounce?.cancel();
     if (query.trim().length < 2) {
       setState(() {
-        _results = const [];
+        _predictions = const [];
         _isLoading = false;
         _hasSearched = false;
       });
       return;
     }
     setState(() => _isLoading = true);
-    _debounce = Timer(const Duration(milliseconds: 400), () => _search(query));
+    _debounce = Timer(
+      const Duration(milliseconds: 400),
+      () => _autocomplete(query),
+    );
   }
 
-  Future<void> _search(String query) async {
-    final results = await LocationService.search(query);
+  Future<void> _autocomplete(String query) async {
+    final results =
+        await PlacesService.autocomplete(query, _sessionToken);
     if (!mounted) return;
     setState(() {
-      _results = results;
+      _predictions = results;
       _isLoading = false;
       _hasSearched = true;
     });
+  }
+
+  /// Fetch place details (coordinates) for the selected prediction.
+  /// Passes the same session token — this finalises the billing session.
+  Future<void> _onPredictionTap(PlacePrediction prediction) async {
+    setState(() => _isLoading = true);
+    final result = await PlacesService.placeDetails(
+      prediction.placeId,
+      _sessionToken,
+    );
+    if (!mounted) return;
+    if (result != null) {
+      Navigator.of(context).pop(result.toLocationPoint());
+    } else {
+      setState(() => _isLoading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not load location details.')),
+      );
+    }
+  }
+
+  Future<void> _useCurrentLocation() async {
+    setState(() => _fetchingLocation = true);
+    final result = await GpsService.currentLocation();
+    if (!mounted) return;
+    if (result != null) {
+      Navigator.of(context).pop(result.toLocationPoint());
+    } else {
+      setState(() => _fetchingLocation = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Location permission denied or unavailable. '
+            'Enable Location in device Settings.',
+          ),
+        ),
+      );
+    }
   }
 
   @override
@@ -136,9 +183,17 @@ class _LocationPickerSheetState extends State<LocationPickerSheet> {
               ),
             ),
             const Divider(height: 1, color: AppColors.border),
-            Expanded(
-              child: _buildBody(scrollController, isPickup),
-            ),
+
+            // Current location button — only shown for pickup
+            if (isPickup)
+              _CurrentLocationTile(
+                isLoading: _fetchingLocation,
+                onTap: _useCurrentLocation,
+              ),
+            if (isPickup)
+              const Divider(height: 1, color: AppColors.border),
+
+            Expanded(child: _buildBody(scrollController, isPickup)),
           ],
         ),
       ),
@@ -158,12 +213,10 @@ class _LocationPickerSheetState extends State<LocationPickerSheet> {
         ),
       );
     }
-
     if (_isLoading) {
       return const Center(child: CircularProgressIndicator());
     }
-
-    if (_hasSearched && _results.isEmpty) {
+    if (_hasSearched && _predictions.isEmpty) {
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(32),
@@ -188,20 +241,17 @@ class _LocationPickerSheetState extends State<LocationPickerSheet> {
     return ListView.separated(
       controller: scrollController,
       padding: const EdgeInsets.symmetric(vertical: 8),
-      itemCount: _results.length,
-      separatorBuilder: (_, __) => const Divider(
-        height: 1,
-        color: AppColors.border,
-        indent: 56,
-      ),
+      itemCount: _predictions.length,
+      separatorBuilder: (_, __) =>
+          const Divider(height: 1, color: AppColors.border, indent: 56),
       itemBuilder: (context, i) {
-        final result = _results[i];
+        final p = _predictions[i];
         return ListTile(
           leading: Container(
             width: 36,
             height: 36,
-            decoration: BoxDecoration(
-              color: const Color(0xFFF3F4F6),
+            decoration: const BoxDecoration(
+              color: Color(0xFFF3F4F6),
               shape: BoxShape.circle,
             ),
             child: Icon(
@@ -211,27 +261,64 @@ class _LocationPickerSheetState extends State<LocationPickerSheet> {
             ),
           ),
           title: Text(
-            result.shortAddress,
+            p.text,
             style: const TextStyle(
               fontSize: 15,
               fontWeight: FontWeight.w600,
               color: AppColors.textPrimary,
             ),
           ),
-          subtitle: Text(
-            result.fullAddress,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              fontSize: 12,
-              color: AppColors.textSecondary,
-            ),
-          ),
-          onTap: () => Navigator.of(context).pop(result.toLocationPoint()),
+          onTap: () => _onPredictionTap(p),
         );
       },
     );
   }
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+
+class _CurrentLocationTile extends StatelessWidget {
+  const _CurrentLocationTile({
+    required this.isLoading,
+    required this.onTap,
+  });
+  final bool isLoading;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => ListTile(
+        onTap: isLoading ? null : onTap,
+        leading: Container(
+          width: 36,
+          height: 36,
+          decoration: const BoxDecoration(
+            color: AppColors.primaryLight,
+            shape: BoxShape.circle,
+          ),
+          child: isLoading
+              ? const Padding(
+                  padding: EdgeInsets.all(9),
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: AppColors.primary,
+                  ),
+                )
+              : const Icon(Icons.my_location,
+                  size: 18, color: AppColors.primary),
+        ),
+        title: const Text(
+          'Use current location',
+          style: TextStyle(
+            fontSize: 15,
+            fontWeight: FontWeight.w600,
+            color: AppColors.primary,
+          ),
+        ),
+        subtitle: const Text(
+          'Requires location permission',
+          style: TextStyle(fontSize: 11, color: AppColors.textSecondary),
+        ),
+      );
 }
 
 class _Handle extends StatelessWidget {

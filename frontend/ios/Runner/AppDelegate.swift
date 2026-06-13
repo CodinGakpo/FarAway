@@ -8,9 +8,10 @@ import UIKit
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
   ) -> Bool {
-    // Replace YOUR_IOS_MAPS_API_KEY with a real key from https://console.cloud.google.com
-    // (Maps SDK for iOS must be enabled). Without a valid key the map renders grey.
-    GMSServices.provideAPIKey("YOUR_IOS_MAPS_API_KEY")
+    // API key is set in ios/Flutter/*.xcconfig and surfaced via Info.plist MapsApiKey.
+    // To update: change MAPS_API_KEY in *.xcconfig (keep in sync with frontend/.env).
+    let mapsKey = Bundle.main.object(forInfoDictionaryKey: "MapsApiKey") as? String ?? ""
+    GMSServices.provideAPIKey(mapsKey)
     GeneratedPluginRegistrant.register(with: self)
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
   }

@@ -6,7 +6,7 @@ import '../../core/app_theme.dart';
 import '../../models/booking.dart';
 import '../../providers/booking_provider.dart';
 import '../../providers/shipment_provider.dart';
-import '../../widgets/fallback_map.dart';
+import '../../widgets/app_map.dart';
 
 class TrackingScreen extends StatefulWidget {
   const TrackingScreen({super.key});
@@ -23,7 +23,9 @@ class _TrackingScreenState extends State<TrackingScreen>
   int _step = 0;
   final int _totalSteps = 60;
 
-
+  // GlobalKey lets us push truck position updates to AppMap without rebuilding
+  // the entire widget tree — the architecture ready for real GPS streams.
+  final _mapKey = GlobalKey<AppMapState>();
 
   late List<LatLng> _routePoints;
   LatLng? _truckPosition;
@@ -55,8 +57,6 @@ class _TrackingScreenState extends State<TrackingScreen>
 
     _routePoints = _buildRoute(pickup, drop, _totalSteps);
     _truckPosition = _routePoints.first;
-
-    _updateMarkers(booking);
     _startSimulation();
   }
 
@@ -94,7 +94,11 @@ class _TrackingScreenState extends State<TrackingScreen>
       _step++;
       _truckPosition = _routePoints[_step];
 
-      // Advance booking status at milestones
+      // Push truck position to map directly — avoids rebuilding the whole screen
+      final label = booking.draft.selectedTruck?.driverName ?? 'Driver';
+      _mapKey.currentState?.updateTruckPosition(_truckPosition!, label: label);
+
+      // Advance booking status at milestones — updates only the bottom panel
       final progress = _step / _totalSteps;
       final currentIdx = booking.status.index;
       if (progress > 0.12 && currentIdx < BookingStatus.driverAssigned.index) {
@@ -112,19 +116,10 @@ class _TrackingScreenState extends State<TrackingScreen>
           currentIdx < BookingStatus.nearDestination.index) {
         context.read<BookingProvider>().advanceStatus();
       }
-
-      _updateMarkers(booking);
-
-
     } else {
-      // Delivery complete
       _movementTimer?.cancel();
       _showDeliveredDialog();
     }
-  }
-
-  void _updateMarkers(Booking booking) {
-    setState(() {});
   }
 
   void _showDeliveredDialog() {
@@ -192,14 +187,16 @@ class _TrackingScreenState extends State<TrackingScreen>
     return Scaffold(
       body: Stack(
         children: [
-          // Map
-          FallbackMap(
-            pickupAddress: booking.draft.pickup?.shortAddress,
-            dropAddress: booking.draft.drop?.shortAddress,
-            truckProgress: progress,
+          // Real Google Map — truck marker updated via _mapKey (no tree rebuild)
+          AppMap(
+            key: _mapKey,
+            pickup: booking.draft.pickup?.latLng,
+            drop: booking.draft.drop?.latLng,
+            pickupLabel: booking.draft.pickup?.shortAddress,
+            dropLabel: booking.draft.drop?.shortAddress,
+            truckPosition: _truckPosition,
             truckLabel: booking.draft.selectedTruck?.driverName ?? 'Driver',
-            truckSublabel: booking.draft.selectedTruck?.truckNumber,
-            showLogoPill: false, // The tracking screen does not have the logo pill overlay
+            routePoints: _routePoints,
           ),
 
           // Top back button

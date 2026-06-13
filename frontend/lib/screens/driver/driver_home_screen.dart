@@ -4,7 +4,7 @@ import '../../core/app_theme.dart';
 import '../../models/trip.dart';
 import '../../services/api_service.dart';
 
-import '../../widgets/fallback_map.dart';
+import '../../widgets/app_map.dart';
 import 'create_trip_screen.dart';
 import 'incoming_requests_screen.dart';
 import 'active_trip_dashboard.dart';
@@ -100,11 +100,10 @@ class _DriverHomeTabState extends State<DriverHomeTab> {
     return Scaffold(
       body: Stack(
         children: [
-          // 1. Fallback Map background
-          FallbackMap(
-            pickupAddress: _activeTrip?.origin,
-            dropAddress: _activeTrip?.destination,
-            showLogoPill: true,
+          // Map background — shows trip origin→destination when active trip loaded
+          AppMap(
+            pickup: null,   // driver home uses text-based origin/destination
+            drop: null,     // trip LatLng coords not in Trip model yet
           ),
 
           // 2. Sliding bottom sheet

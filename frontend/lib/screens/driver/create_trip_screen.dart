@@ -4,7 +4,7 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../../core/app_theme.dart';
 import '../../models/location_point.dart';
 import '../../services/api_service.dart';
-import '../../widgets/fallback_map.dart';
+import '../../widgets/app_map.dart';
 import '../customer/location_picker_screen.dart';
 
 class CreateTripScreen extends StatefulWidget {
@@ -216,17 +216,15 @@ class _CreateTripScreenState extends State<CreateTripScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  // Fallback map preview
+                  // Route preview map
                   ClipRRect(
                     borderRadius: BorderRadius.circular(16),
-                    child: SizedBox(
+                    child: AppMap(
+                      pickup: _startLocation?.latLng,
+                      drop: _endLocation?.latLng,
+                      pickupLabel: _startLocation?.shortAddress,
+                      dropLabel: _endLocation?.shortAddress,
                       height: 180,
-                      child: FallbackMap(
-                        pickupAddress: _startLocation?.shortAddress,
-                        dropAddress: _endLocation?.shortAddress,
-                        showLogoPill: false,
-                        height: 180,
-                      ),
                     ),
                   ),
                   const SizedBox(height: 20),
