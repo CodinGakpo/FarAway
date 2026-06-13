@@ -36,14 +36,19 @@ class _LocationPickerSheetState extends State<LocationPickerSheet> {
   final _controller = TextEditingController();
   Timer? _debounce;
 
-  // Session token for this picker session — covers all autocomplete calls
-  // plus the single Place Details call on selection (one billable session).
+  // One session token per picker open. All autocomplete calls in this session
+  // share the token. Place Details closes the session when the user selects.
   final String _sessionToken = PlacesService.newSessionToken();
 
   List<PlacePrediction> _predictions = const [];
-  bool _isLoading = false;
+  // FIX: Separate the "searching" indicator from the results list.
+  // While searching, old results remain visible. Only the prefix icon spins.
+  bool _isSearching = false;
   bool _hasSearched = false;
   bool _fetchingLocation = false;
+  bool _fetchingDetails = false;
+  // FIX: Track API errors separately from empty results.
+  String? _apiError;
 
   @override
   void dispose() {
@@ -57,45 +62,51 @@ class _LocationPickerSheetState extends State<LocationPickerSheet> {
     if (query.trim().length < 2) {
       setState(() {
         _predictions = const [];
-        _isLoading = false;
+        _isSearching = false;
         _hasSearched = false;
+        _apiError = null;
       });
       return;
     }
-    setState(() => _isLoading = true);
     _debounce = Timer(
-      const Duration(milliseconds: 400),
-      () => _autocomplete(query),
+      const Duration(milliseconds: 300), // FIX: 300ms feels snappier than 400ms
+      () {
+        // FIX: Set searching state INSIDE the debounce callback — not on every
+        // keystroke — so the spinner only shows when a request is actually fired.
+        if (mounted) setState(() => _isSearching = true);
+        _autocomplete(query);
+      },
     );
   }
 
   Future<void> _autocomplete(String query) async {
-    final results =
+    final (predictions, error) =
         await PlacesService.autocomplete(query, _sessionToken);
     if (!mounted) return;
     setState(() {
-      _predictions = results;
-      _isLoading = false;
+      _predictions = predictions;
+      _isSearching = false;
       _hasSearched = true;
+      _apiError = error; // null when successful, message string on failure
     });
   }
 
-  /// Fetch place details (coordinates) for the selected prediction.
-  /// Passes the same session token — this finalises the billing session.
   Future<void> _onPredictionTap(PlacePrediction prediction) async {
-    setState(() => _isLoading = true);
-    final result = await PlacesService.placeDetails(
-      prediction.placeId,
-      _sessionToken,
-    );
+    if (_fetchingDetails) return;
+    setState(() {
+      _fetchingDetails = true;
+      _apiError = null;
+    });
+    final (result, error) =
+        await PlacesService.placeDetails(prediction.placeId, _sessionToken);
     if (!mounted) return;
     if (result != null) {
       Navigator.of(context).pop(result.toLocationPoint());
     } else {
-      setState(() => _isLoading = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Could not load location details.')),
-      );
+      setState(() {
+        _fetchingDetails = false;
+        _apiError = error ?? 'Could not load location details.';
+      });
     }
   }
 
@@ -118,6 +129,9 @@ class _LocationPickerSheetState extends State<LocationPickerSheet> {
     }
   }
 
+  // True when any background work is happening (for prefix icon)
+  bool get _isBusy => _isSearching || _fetchingDetails;
+
   @override
   Widget build(BuildContext context) {
     final isPickup = widget.mode == _PickerMode.pickup;
@@ -125,9 +139,13 @@ class _LocationPickerSheetState extends State<LocationPickerSheet> {
       initialChildSize: 0.7,
       minChildSize: 0.5,
       maxChildSize: 0.95,
-      builder: (context, scrollController) => Container(
-        decoration: const BoxDecoration(
-          color: AppColors.surface,
+      builder: (context, scrollController) => Material(
+        // Material provides the ink-splash surface that ListTile requires.
+        // Container + BoxDecoration does NOT provide this, causing the
+        // "ink splashes may be invisible" warning.
+        color: AppColors.surface,
+        clipBehavior: Clip.antiAlias,
+        shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
         ),
         child: Column(
@@ -154,8 +172,10 @@ class _LocationPickerSheetState extends State<LocationPickerSheet> {
                     autofocus: true,
                     onChanged: _onQueryChanged,
                     decoration: InputDecoration(
-                      hintText: 'Search city or area...',
-                      prefixIcon: _isLoading
+                      hintText: 'Search city, area or landmark...',
+                      // FIX: Spinner only shows when actively searching.
+                      // Previous results remain visible beneath it.
+                      prefixIcon: _isBusy
                           ? const Padding(
                               padding: EdgeInsets.all(12),
                               child: SizedBox(
@@ -183,15 +203,24 @@ class _LocationPickerSheetState extends State<LocationPickerSheet> {
               ),
             ),
             const Divider(height: 1, color: AppColors.border),
-
-            // Current location button — only shown for pickup
             if (isPickup)
               _CurrentLocationTile(
                 isLoading: _fetchingLocation,
                 onTap: _useCurrentLocation,
               ),
-            if (isPickup)
-              const Divider(height: 1, color: AppColors.border),
+            if (isPickup) const Divider(height: 1, color: AppColors.border),
+
+            // FIX: API error banner — distinguishes "no results" from "API broken"
+            if (_apiError != null)
+              _ErrorBanner(
+                message: _apiError!,
+                onRetry: _controller.text.trim().length >= 2
+                    ? () {
+                        setState(() => _apiError = null);
+                        _autocomplete(_controller.text);
+                      }
+                    : null,
+              ),
 
             Expanded(child: _buildBody(scrollController, isPickup)),
           ],
@@ -201,22 +230,24 @@ class _LocationPickerSheetState extends State<LocationPickerSheet> {
   }
 
   Widget _buildBody(ScrollController scrollController, bool isPickup) {
-    if (!_hasSearched && !_isLoading) {
+    // FIX: Never replace results with a full-screen spinner.
+    // If no results yet and not searched, show the prompt.
+    if (!_hasSearched) {
       return const Center(
         child: Padding(
           padding: EdgeInsets.all(32),
           child: Text(
-            'Start typing to search for a city or area.',
+            'Search for a city, area, or landmark.',
             textAlign: TextAlign.center,
-            style: TextStyle(color: AppColors.textSecondary, fontSize: 14),
+            style:
+                TextStyle(color: AppColors.textSecondary, fontSize: 14),
           ),
         ),
       );
     }
-    if (_isLoading) {
-      return const Center(child: CircularProgressIndicator());
-    }
-    if (_hasSearched && _predictions.isEmpty) {
+
+    // Show empty state only after a successful search with zero results.
+    if (_hasSearched && _predictions.isEmpty && _apiError == null) {
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(32),
@@ -232,21 +263,35 @@ class _LocationPickerSheetState extends State<LocationPickerSheet> {
                 style: const TextStyle(
                     color: AppColors.textSecondary, fontSize: 14),
               ),
+              const SizedBox(height: 6),
+              const Text(
+                'Try a city name, area, or landmark.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                    color: AppColors.textSecondary, fontSize: 12),
+              ),
             ],
           ),
         ),
       );
     }
 
+    // FIX: Show results even while a new search is in-flight.
+    // The spinner in the prefix icon communicates that a refresh is coming.
     return ListView.separated(
       controller: scrollController,
       padding: const EdgeInsets.symmetric(vertical: 8),
       itemCount: _predictions.length,
-      separatorBuilder: (_, __) =>
-          const Divider(height: 1, color: AppColors.border, indent: 56),
+      separatorBuilder: (_, __) => const Divider(
+        height: 1,
+        color: AppColors.border,
+        indent: 56,
+      ),
       itemBuilder: (context, i) {
         final p = _predictions[i];
+        final isTapping = _fetchingDetails;
         return ListTile(
+          enabled: !isTapping,
           leading: Container(
             width: 36,
             height: 36,
@@ -260,15 +305,27 @@ class _LocationPickerSheetState extends State<LocationPickerSheet> {
               color: isPickup ? AppColors.primary : AppColors.orange,
             ),
           ),
+          // FIX: Two-line display with mainText (bold) and secondaryText (gray)
           title: Text(
-            p.text,
+            p.mainText,
             style: const TextStyle(
               fontSize: 15,
               fontWeight: FontWeight.w600,
               color: AppColors.textPrimary,
             ),
           ),
-          onTap: () => _onPredictionTap(p),
+          subtitle: p.secondaryText.isNotEmpty
+              ? Text(
+                  p.secondaryText,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: AppColors.textSecondary,
+                  ),
+                )
+              : null,
+          onTap: isTapping ? null : () => _onPredictionTap(p),
         );
       },
     );
@@ -277,11 +334,59 @@ class _LocationPickerSheetState extends State<LocationPickerSheet> {
 
 // ──────────────────────────────────────────────────────────────────────────────
 
+/// Shown when the Places API returns an error — clearly distinguishes API
+/// failures from genuine "no results" responses.
+class _ErrorBanner extends StatelessWidget {
+  const _ErrorBanner({required this.message, this.onRetry});
+  final String message;
+  final VoidCallback? onRetry;
+
+  @override
+  Widget build(BuildContext context) => Container(
+        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: const Color(0xFFFEE2E2),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: const Color(0xFFFCA5A5)),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.warning_amber_rounded,
+                size: 18, color: AppColors.error),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                message,
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: AppColors.error,
+                ),
+              ),
+            ),
+            if (onRetry != null)
+              TextButton(
+                onPressed: onRetry,
+                style: TextButton.styleFrom(
+                  minimumSize: Size.zero,
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 8, vertical: 4),
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+                child: const Text('Retry',
+                    style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.error)),
+              ),
+          ],
+        ),
+      );
+}
+
 class _CurrentLocationTile extends StatelessWidget {
-  const _CurrentLocationTile({
-    required this.isLoading,
-    required this.onTap,
-  });
+  const _CurrentLocationTile(
+      {required this.isLoading, required this.onTap});
   final bool isLoading;
   final VoidCallback onTap;
 
