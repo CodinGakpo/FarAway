@@ -4,21 +4,29 @@ import '../models/booking.dart';
 import '../models/shipment_draft.dart';
 import '../models/shipment_history_item.dart';
 import '../services/mock_data_service.dart';
+import '../services/api_service.dart';
 
 class BookingProvider extends ChangeNotifier {
   Booking? _activeBooking;
-  final List<ShipmentHistoryItem> _history =
-      List.of(MockDataService.history);
 
   Booking? get activeBooking => _activeBooking;
   bool get hasActiveBooking =>
       _activeBooking != null && _activeBooking!.status.isActive;
-  List<ShipmentHistoryItem> get history => List.unmodifiable(_history);
 
   Future<Booking> createBooking(ShipmentDraft draft) async {
-    await Future.delayed(const Duration(milliseconds: 1600));
+    final shipment = await ApiService().createShipment(
+      draft.selectedTruck!.id,
+      draft.pickup?.address ?? '',
+      draft.drop?.address ?? '',
+      draft.weightKg,
+      draft.volumeCm3 / 1000000,
+      draft.cargoCategory,
+    );
+
+    await ApiService().confirmBooking(shipment.id);
+
     final booking = Booking(
-      id: 'FB${1000 + Random().nextInt(8999)}',
+      id: shipment.id,
       draft: draft,
       status: BookingStatus.confirmed,
       createdAt: DateTime.now(),
@@ -41,28 +49,6 @@ class BookingProvider extends ChangeNotifier {
   }
 
   void completeAndArchive() {
-    if (_activeBooking == null) return;
-    final b = _activeBooking!;
-    final pickup = b.draft.pickup;
-    final drop = b.draft.drop;
-    if (pickup != null && drop != null) {
-      _history.insert(
-        0,
-        ShipmentHistoryItem(
-          id: b.id,
-          pickupAddress: pickup.shortAddress,
-          dropAddress: drop.shortAddress,
-          date: b.createdAt,
-          price: b.finalPrice,
-          status: 'Delivered',
-          truckType: b.draft.selectedTruck?.type ?? 'Truck',
-          cargoName: b.draft.cargoName.isNotEmpty
-              ? b.draft.cargoName
-              : 'Cargo',
-          distanceKm: b.draft.distanceKm,
-        ),
-      );
-    }
     _activeBooking = null;
     notifyListeners();
   }

@@ -1,12 +1,13 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import '../../services/api_service.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:provider/provider.dart';
 import '../../core/app_theme.dart';
 import '../../models/booking.dart';
 import '../../providers/booking_provider.dart';
 import '../../providers/shipment_provider.dart';
-import '../../widgets/fallback_map.dart';
+import '../../widgets/live_map.dart';
 
 class TrackingScreen extends StatefulWidget {
   const TrackingScreen({super.key});
@@ -25,8 +26,9 @@ class _TrackingScreenState extends State<TrackingScreen>
 
 
 
-  late List<LatLng> _routePoints;
+  List<LatLng> _routePoints = [];
   LatLng? _truckPosition;
+  bool _isLoadingRoute = true;
 
   late AnimationController _pulseController;
   late Animation<double> _pulseAnim;
@@ -45,19 +47,39 @@ class _TrackingScreenState extends State<TrackingScreen>
     WidgetsBinding.instance.addPostFrameCallback((_) => _initTracking());
   }
 
-  void _initTracking() {
+  Future<void> _initTracking() async {
     final booking = context.read<BookingProvider>().activeBooking;
     if (booking == null) return;
 
-    final pickup = booking.draft.pickup?.latLng;
-    final drop = booking.draft.drop?.latLng;
-    if (pickup == null || drop == null) return;
+    final tripId = booking.draft.selectedTruck?.id;
+    if (tripId != null) {
+      try {
+        final trip = await ApiService().getTrip(tripId);
+        if (trip.routeCoordinates != null && trip.routeCoordinates!.isNotEmpty) {
+          _routePoints = trip.routeCoordinates!
+              .map((c) => LatLng(c[1], c[0]))
+              .toList();
+        }
+      } catch (e) {
+        // fallback
+      }
+    }
 
-    _routePoints = _buildRoute(pickup, drop, _totalSteps);
-    _truckPosition = _routePoints.first;
+    if (_routePoints.isEmpty) {
+      final pickup = booking.draft.pickup?.latLng;
+      final drop = booking.draft.drop?.latLng;
+      if (pickup != null && drop != null) {
+        _routePoints = _buildRoute(pickup, drop, _totalSteps);
+      }
+    }
 
-    _updateMarkers(booking);
-    _startSimulation();
+    if (mounted && _routePoints.isNotEmpty) {
+      setState(() {
+        _isLoadingRoute = false;
+        _truckPosition = _routePoints.first;
+      });
+      _startSimulation();
+    }
   }
 
   List<LatLng> _buildRoute(LatLng a, LatLng b, int steps) {
@@ -90,12 +112,17 @@ class _TrackingScreenState extends State<TrackingScreen>
     final booking = context.read<BookingProvider>().activeBooking;
     if (booking == null) return;
 
-    if (_step < _totalSteps) {
+    if (_step < _totalSteps && _routePoints.isNotEmpty) {
       _step++;
-      _truckPosition = _routePoints[_step];
+      
+      // Map step to an index in _routePoints array
+      final double progress = _step / _totalSteps;
+      int idx = (progress * (_routePoints.length - 1)).round();
+      if (idx >= _routePoints.length) idx = _routePoints.length - 1;
+      
+      _truckPosition = _routePoints[idx];
 
       // Advance booking status at milestones
-      final progress = _step / _totalSteps;
       final currentIdx = booking.status.index;
       if (progress > 0.12 && currentIdx < BookingStatus.driverAssigned.index) {
         context.read<BookingProvider>().advanceStatus();
@@ -192,14 +219,18 @@ class _TrackingScreenState extends State<TrackingScreen>
     return Scaffold(
       body: Stack(
         children: [
-          // Map
-          FallbackMap(
-            pickupAddress: booking.draft.pickup?.shortAddress,
-            dropAddress: booking.draft.drop?.shortAddress,
-            truckProgress: progress,
+          if (_isLoadingRoute)
+            const Center(child: CircularProgressIndicator())
+          else
+            // Map
+            LiveMapWidget(
+            pickupLocation: booking.draft.pickup?.latLng,
+            dropLocation: booking.draft.drop?.latLng,
+            routePoints: _routePoints,
+            truckPosition: _truckPosition,
             truckLabel: booking.draft.selectedTruck?.driverName ?? 'Driver',
             truckSublabel: booking.draft.selectedTruck?.truckNumber,
-            showLogoPill: false, // The tracking screen does not have the logo pill overlay
+            showLogoPill: false,
           ),
 
           // Top back button

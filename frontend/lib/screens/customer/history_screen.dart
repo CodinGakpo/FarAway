@@ -3,14 +3,43 @@ import 'package:provider/provider.dart';
 import '../../core/app_theme.dart';
 import '../../models/shipment_history_item.dart';
 import '../../providers/booking_provider.dart';
+import '../../services/api_service.dart';
 
-class HistoryScreen extends StatelessWidget {
+class HistoryScreen extends StatefulWidget {
   const HistoryScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    final history = context.watch<BookingProvider>().history;
+  State<HistoryScreen> createState() => _HistoryScreenState();
+}
 
+class _HistoryScreenState extends State<HistoryScreen> {
+  List<ShipmentHistoryItem> _history = [];
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadHistory();
+  }
+
+  Future<void> _loadHistory() async {
+    try {
+      final items = await ApiService().getShipmentHistory();
+      if (mounted) {
+        setState(() {
+          _history = items;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
@@ -21,17 +50,19 @@ class HistoryScreen extends StatelessWidget {
           child: Container(height: 1, color: AppColors.border),
         ),
       ),
-      body: history.isEmpty
-          ? _EmptyState()
-          : ListView.separated(
-              padding: const EdgeInsets.all(16),
-              itemCount: history.length,
-              separatorBuilder: (_, __) => const SizedBox(height: 10),
-              itemBuilder: (context, i) => _HistoryCard(
-                item: history[i],
-                onTap: () => _showDetails(context, history[i]),
-              ),
-            ),
+      body: _isLoading 
+          ? const Center(child: CircularProgressIndicator())
+          : _history.isEmpty
+              ? _EmptyState()
+              : ListView.separated(
+                  padding: const EdgeInsets.all(16),
+                  itemCount: _history.length,
+                  separatorBuilder: (_, __) => const SizedBox(height: 10),
+                  itemBuilder: (context, i) => _HistoryCard(
+                    item: _history[i],
+                    onTap: () => _showDetails(context, _history[i]),
+                  ),
+                ),
     );
   }
 

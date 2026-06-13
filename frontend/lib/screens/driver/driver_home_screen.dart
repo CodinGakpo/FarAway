@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 import '../../core/app_theme.dart';
 import '../../models/trip.dart';
 import '../../services/api_service.dart';
 
-import '../../widgets/fallback_map.dart';
+import '../../widgets/live_map.dart';
 import 'create_trip_screen.dart';
 import 'incoming_requests_screen.dart';
 import 'active_trip_dashboard.dart';
@@ -100,10 +101,12 @@ class _DriverHomeTabState extends State<DriverHomeTab> {
     return Scaffold(
       body: Stack(
         children: [
-          // 1. Fallback Map background
-          FallbackMap(
-            pickupAddress: _activeTrip?.origin,
-            dropAddress: _activeTrip?.destination,
+          LiveMapWidget(
+            routePoints: _activeTrip?.routeCoordinates != null
+                ? _activeTrip!.routeCoordinates!
+                    .map((c) => LatLng(c[1], c[0]))
+                    .toList()
+                : null,
             showLogoPill: true,
           ),
 

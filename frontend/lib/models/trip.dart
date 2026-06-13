@@ -10,6 +10,7 @@ class Trip {
   final double remainingWeight;
   final double remainingVolume;
   final String status;
+  final List<dynamic>? routeCoordinates;
 
   Trip({
     required this.id,
@@ -23,6 +24,7 @@ class Trip {
     required this.remainingWeight,
     required this.remainingVolume,
     required this.status,
+    this.routeCoordinates,
   });
 
   factory Trip.fromJson(Map<String, dynamic> json) {
@@ -38,6 +40,7 @@ class Trip {
       remainingWeight: ((json['remaining_weight_capacity'] ?? json['remainingWeight'] ?? json['max_weight_capacity'] ?? json['maxWeight']) as num).toDouble(),
       remainingVolume: ((json['remaining_volume_capacity'] ?? json['remainingVolume'] ?? json['max_volume_capacity'] ?? json['maxVolume']) as num).toDouble(),
       status: json['status'] as String? ?? 'ACTIVE',
+      routeCoordinates: json['route_coordinates'] as List<dynamic>?,
     );
   }
 

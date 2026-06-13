@@ -10,8 +10,8 @@ import '../../providers/shipment_provider.dart';
 import 'location_picker_screen.dart';
 import 'shipment_details_screen.dart';
 import 'tracking_screen.dart';
-import '../../widgets/fallback_map.dart';
-
+import 'package:google_maps_flutter/google_maps_flutter.dart';
+import '../../widgets/live_map.dart';
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
@@ -73,9 +73,9 @@ class _HomeScreenState extends State<HomeScreen> {
           Consumer<ShipmentProvider>(
             builder: (context, shipmentProv, _) {
               final draft = shipmentProv.draft;
-              return FallbackMap(
-                pickupAddress: draft.pickup?.shortAddress,
-                dropAddress: draft.drop?.shortAddress,
+              return LiveMapWidget(
+                pickupLocation: draft.pickup?.latLng,
+                dropLocation: draft.drop?.latLng,
                 showLogoPill: false,
               );
             },

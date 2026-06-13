@@ -7,6 +7,8 @@ import '../config/constants.dart';
 import '../models/shipment_request.dart';
 import '../models/trip.dart';
 import '../models/user.dart';
+import '../models/truck_option.dart';
+import '../models/shipment_history_item.dart';
 import '../models/agent_models.dart';
 
 // Thrown when the server returns 401 Unauthorized (token expired / invalid).
@@ -250,6 +252,38 @@ class ApiService {
     });
   }
 
+  Future<Trip> getTrip(String tripId) async {
+    final response = await _get('${AppConstants.TRIPS}/$tripId');
+    return _handleResponse(response, (body) {
+      final m = body is Map<String, dynamic> ? body : Map<String, dynamic>.from(body as Map);
+      return Trip.fromJson(m);
+    });
+  }
+
+  Future<List<ShipmentHistoryItem>> getShipmentHistory() async {
+    final response = await _get(AppConstants.SHIPMENTS);
+
+    return _handleResponse(response, (body) {
+      if (body is List) {
+        return body.map((item) {
+          final m = Map<String, dynamic>.from(item as Map);
+          return ShipmentHistoryItem(
+            id: m['id'].toString(),
+            pickupAddress: m['pickup_location'] ?? 'Unknown',
+            dropAddress: m['dropoff_location'] ?? 'Unknown',
+            date: DateTime.tryParse(m['created_at'] ?? '') ?? DateTime.now(),
+            price: (m['price'] as num?)?.toDouble() ?? 0.0,
+            status: m['status'] ?? 'Unknown',
+            truckType: 'Cargo Truck', 
+            cargoName: m['cargo_category'] ?? 'General Cargo',
+            distanceKm: 0.0, // calculate if needed
+          );
+        }).toList();
+      }
+      return const [];
+    });
+  }
+
   Future<List<Trip>> getTripHistory() async {
     final response = await _get('${AppConstants.TRIPS}/history');
 
@@ -259,9 +293,16 @@ class ApiService {
             .map((item) => Trip.fromJson(Map<String, dynamic>.from(item as Map)))
             .toList();
       }
-      if (body is Map<String, dynamic>) {
-        final list = _extractList(body, ['trips', 'history', 'data']);
-        return list
+      return const [];
+    });
+  }
+
+  Future<List<Trip>> getAvailableTrips() async {
+    final response = await _get('${AppConstants.TRIPS}?status=ACTIVE');
+
+    return _handleResponse(response, (body) {
+      if (body is List) {
+        return body
             .map((item) => Trip.fromJson(Map<String, dynamic>.from(item as Map)))
             .toList();
       }
@@ -294,6 +335,7 @@ class ApiService {
   }
 
   Future<ShipmentRequest> createShipment(
+    String tripId,
     String pickupLocation,
     String dropoffLocation,
     double weight,
@@ -303,33 +345,35 @@ class ApiService {
     final response = await _post(
       AppConstants.SHIPMENTS,
       {
-        'pickupLocation': pickupLocation,
-        'dropoffLocation': dropoffLocation,
+        'trip_id': int.parse(tripId),
+        'pickup_location': pickupLocation,
+        'dropoff_location': dropoffLocation,
         'weight': weight,
         'volume': volume,
-        'cargoCategory': cargoCategory,
+        'cargo_category': cargoCategory,
       },
     );
 
     return _handleResponse(response, (body) {
-      final data =
-          _extractMap(body, ['shipment', 'data'], entityName: 'shipment');
+      // The backend returns the raw shipment object directly or wrapped.
+      // Usually it's just the shipment object if created from router.
+      final data = body is Map<String, dynamic> && body.containsKey('shipment') 
+          ? body['shipment'] 
+          : body;
       return ShipmentRequest.fromJson(data);
     });
   }
 
   Future<ShipmentRequest> confirmBooking(String shipmentId) async {
     final response = await _post(
-      '${AppConstants.BOOKINGS}/$shipmentId/confirm',
+      '${AppConstants.SHIPMENTS}/$shipmentId/confirm',
       {},
     );
 
     return _handleResponse(response, (body) {
-      final data = _extractMap(
-        body,
-        ['shipment', 'booking', 'data'],
-        entityName: 'booking',
-      );
+      final data = body is Map<String, dynamic> && body.containsKey('shipment') 
+          ? body['shipment'] 
+          : body;
       return ShipmentRequest.fromJson(data);
     });
   }

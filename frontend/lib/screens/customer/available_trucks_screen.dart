@@ -4,6 +4,8 @@ import '../../core/app_theme.dart';
 import '../../models/truck_option.dart';
 import '../../providers/shipment_provider.dart';
 import '../../services/mock_data_service.dart';
+import '../../services/api_service.dart';
+import 'dart:math' as math;
 import 'booking_confirmation_screen.dart';
 
 class AvailableTrucksScreen extends StatefulWidget {
@@ -16,14 +18,70 @@ class AvailableTrucksScreen extends StatefulWidget {
 
 class _AvailableTrucksScreenState extends State<AvailableTrucksScreen> {
   TruckOption? _selected;
+  List<TruckOption> _availableTrucks = [];
+  bool _isLoading = true;
 
   @override
   void initState() {
     super.initState();
-    _selected = MockDataService.trucks.first;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<ShipmentProvider>().selectTruck(_selected!);
+      _loadTrips();
     });
+  }
+
+  Future<void> _loadTrips() async {
+    final draft = context.read<ShipmentProvider>().draft;
+    try {
+      final trips = await ApiService().getAvailableTrips();
+      List<TruckOption> viableTrucks = [];
+      
+      final evaluations = await Future.wait(trips.map((trip) => ApiService().evaluateShipment(
+        trip.id,
+        draft.pickup?.address ?? '',
+        draft.drop?.address ?? '',
+        draft.weightKg,
+        draft.volumeCm3 / 1000000, 
+        'general', // backend expects 'general', 'fragile', etc
+      )));
+
+      for (int i = 0; i < trips.length; i++) {
+        final eval = evaluations[i];
+        if (eval.feasible) {
+          final trip = trips[i];
+          viableTrucks.add(TruckOption(
+            id: trip.id,
+            type: 'Cargo Truck', 
+            capacityLabel: '${trip.remainingWeight}kg cap',
+            pickupEta: 'Available',
+            basePrice: eval.price, 
+            pricePerKm: 0,         
+            rating: 4.8,
+            reviewCount: 120,
+            driverName: trip.driverId ?? 'Driver',
+            truckNumber: trip.id.length > 8 ? trip.id.substring(0, 8) : trip.id,
+            description: eval.trace,
+          ));
+        }
+      }
+
+      if (mounted) {
+        setState(() {
+          _availableTrucks = viableTrucks;
+          if (viableTrucks.isNotEmpty) {
+            _selected = viableTrucks.first;
+            context.read<ShipmentProvider>().selectTruck(_selected!);
+          }
+          _isLoading = false;
+        });
+      }
+
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
   }
 
   void _selectTruck(TruckOption truck) {
@@ -111,22 +169,31 @@ class _AvailableTrucksScreenState extends State<AvailableTrucksScreen> {
           const Divider(height: 1, color: AppColors.border),
 
           Expanded(
-            child: ListView.separated(
-              padding: const EdgeInsets.all(16),
-              itemCount: MockDataService.trucks.length,
-              separatorBuilder: (_, __) => const SizedBox(height: 12),
-              itemBuilder: (context, i) {
-                final truck = MockDataService.trucks[i];
-                final isSelected = _selected?.id == truck.id;
-                final price = truck.estimatedTotal(distance);
-                return _TruckCard(
-                  truck: truck,
-                  price: price,
-                  isSelected: isSelected,
-                  onTap: () => _selectTruck(truck),
-                );
-              },
-            ),
+            child: _isLoading
+                ? const Center(child: CircularProgressIndicator())
+                : _availableTrucks.isEmpty
+                    ? const Center(
+                        child: Text(
+                          'No feasible trucks available for this route.',
+                          style: TextStyle(color: AppColors.textSecondary),
+                        ),
+                      )
+                    : ListView.separated(
+                        padding: const EdgeInsets.all(16),
+                        itemCount: _availableTrucks.length,
+                        separatorBuilder: (_, __) => const SizedBox(height: 12),
+                        itemBuilder: (context, i) {
+                          final truck = _availableTrucks[i];
+                          final isSelected = _selected?.id == truck.id;
+                          final price = truck.estimatedTotal(distance);
+                          return _TruckCard(
+                            truck: truck,
+                            price: price,
+                            isSelected: isSelected,
+                            onTap: () => _selectTruck(truck),
+                          );
+                        },
+                      ),
           ),
         ],
       ),
