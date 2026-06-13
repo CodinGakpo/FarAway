@@ -7,6 +7,93 @@ from app.services.geo_service import GeoService
 
 logger = logging.getLogger(__name__)
 
+# ── Corridor definitions ──────────────────────────────────────────────────────
+#
+# Each corridor is a tuple of (origin_keywords, destination_keywords, stops).
+# "stops" is an ordered list of keyword groups. A location matches a stop if
+# ANY keyword in that group appears as a substring of the location string.
+# Pickup index must be strictly less than dropoff index to confirm ordering.
+#
+# Using substring matching means "VIT Vellore" matches the "vellore" group,
+# and "ITPL Bangalore" matches the "bangalore" group — no exact name required.
+
+_CORRIDORS: List[Tuple[List[str], List[str], List[List[str]]]] = [
+    # NH48 — Chennai to Bangalore
+    (
+        ["chennai"],
+        ["bangalore", "bengaluru"],
+        [
+            ["chennai"],
+            ["katpadi", "vellore", "vit"],   # Katpadi is the rail junction; VIT campus nearby
+            ["krishnagiri"],
+            ["hosur"],
+            ["bangalore", "bengaluru", "whitefield", "itpl", "electronic city",
+             "koramangala", "indiranagar", "manyata", "hsr", "btm",
+             "marathahalli", "mg road"],
+        ],
+    ),
+    # NH48 reversed — Bangalore to Chennai
+    (
+        ["bangalore", "bengaluru"],
+        ["chennai"],
+        [
+            ["bangalore", "bengaluru", "whitefield", "itpl", "electronic city",
+             "koramangala", "indiranagar", "manyata", "hsr", "btm",
+             "marathahalli", "mg road"],
+            ["hosur"],
+            ["krishnagiri"],
+            ["katpadi", "vellore", "vit"],
+            ["chennai"],
+        ],
+    ),
+    # Katpadi / Vellore area to Bangalore (sub-segment of NH48)
+    (
+        ["katpadi", "vellore"],
+        ["bangalore", "bengaluru"],
+        [
+            ["katpadi", "vellore", "vit"],
+            ["krishnagiri"],
+            ["hosur"],
+            ["bangalore", "bengaluru", "whitefield", "itpl", "electronic city",
+             "koramangala", "indiranagar", "manyata", "hsr", "btm",
+             "marathahalli", "mg road"],
+        ],
+    ),
+    # Bangalore to Katpadi / Vellore
+    (
+        ["bangalore", "bengaluru"],
+        ["katpadi", "vellore"],
+        [
+            ["bangalore", "bengaluru", "whitefield", "itpl", "electronic city",
+             "koramangala", "indiranagar", "manyata", "hsr", "btm"],
+            ["hosur"],
+            ["krishnagiri"],
+            ["katpadi", "vellore", "vit"],
+        ],
+    ),
+]
+
+
+def _match_corridor(
+    origin: str, destination: str
+) -> Optional[List[List[str]]]:
+    """Return the stop list for the first matching corridor, or None."""
+    o = origin.lower()
+    d = destination.lower()
+    for (orig_kws, dest_kws, stops) in _CORRIDORS:
+        if any(kw in o for kw in orig_kws) and any(kw in d for kw in dest_kws):
+            return stops
+    return None
+
+def _stop_index(location: str, stops: List[List[str]]) -> int:
+    """Return the index of the first matching stop group, or -1."""
+    loc = location.lower()
+    for i, keywords in enumerate(stops):
+        if any(kw in loc for kw in keywords):
+            return i
+    return -1
+
+
 USE_GEOMETRY_MATCHING = True
 
 class FreightShareAgentService:
