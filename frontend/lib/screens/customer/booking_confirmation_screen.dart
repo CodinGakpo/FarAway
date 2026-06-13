@@ -209,7 +209,7 @@ class _BookingConfirmationScreenState
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     const Text(
-                      'Total',
+                      'Estimated Total',
                       style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w700,
@@ -225,6 +225,15 @@ class _BookingConfirmationScreenState
                       ),
                     ),
                   ],
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  '* Final price is calculated by AI after confirmation and may differ.',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: AppColors.textSecondary,
+                    fontStyle: FontStyle.italic,
+                  ),
                 ),
               ],
             ),

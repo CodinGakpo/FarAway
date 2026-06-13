@@ -9,9 +9,22 @@ logger = logging.getLogger(__name__)
 CITY_COORDINATES: Dict[str, Tuple[float, float]] = {
     "chennai": (13.0827, 80.2707),
     "vellore": (12.9165, 79.1325),
+    "katpadi": (12.9320, 79.1482),   # Junction town near Vellore on NH48
     "krishnagiri": (12.5186, 78.2138),
     "hosur": (12.7409, 77.8253),
     "bangalore": (12.9716, 77.5946),
+    "bengaluru": (12.9716, 77.5946),
+    # Bangalore area landmarks
+    "whitefield": (12.9698, 77.7500),
+    "itpl": (12.9850, 77.7268),      # ITPL, Whitefield
+    "electronic city": (12.8458, 77.6692),
+    "koramangala": (12.9279, 77.6271),
+    "indiranagar": (12.9719, 77.6412),
+    "manyata": (13.0474, 77.6200),   # Manyata Tech Park
+    "hsr layout": (12.9116, 77.6370),
+    "btm layout": (12.9166, 77.6101),
+    "marathahalli": (12.9592, 77.6974),
+    "mg road": (12.9753, 77.6088),
     "coimbatore": (11.0168, 76.9558),
     "madurai": (9.9252, 78.1198),
     "trichy": (10.7905, 78.7047),

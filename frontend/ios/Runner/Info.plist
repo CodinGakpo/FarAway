@@ -45,5 +45,14 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<!-- Maps API key read by AppDelegate.swift via Bundle.main.
+	     Value comes from ios/Flutter/*.xcconfig — keep in sync with frontend/.env -->
+	<key>MapsApiKey</key>
+	<string>$(MAPS_API_KEY)</string>
+	<!-- Location permission strings required by geolocator -->
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>FarAway uses your location to set your pickup point and find nearby freight trips.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>FarAway uses your location to set your pickup point and find nearby freight trips.</string>
 </dict>
 </plist>

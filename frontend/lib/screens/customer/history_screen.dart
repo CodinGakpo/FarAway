@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../core/app_theme.dart';
-import '../../models/shipment_history_item.dart';
+import '../../models/shipment_request.dart';
 import '../../providers/booking_provider.dart';
 import '../../services/api_service.dart';
 
@@ -44,7 +44,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
-        title: const Text('Shipment History'),
+        title: const Text('My Shipments'),
         automaticallyImplyLeading: false,
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(1),
@@ -67,47 +67,21 @@ class _HistoryScreenState extends State<HistoryScreen> {
     );
   }
 
-  void _showDetails(BuildContext context, ShipmentHistoryItem item) {
+  void _showDetails(BuildContext context, ShipmentRequest s) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => _DetailSheet(item: item),
+      builder: (_) => _DetailSheet(shipment: s),
     );
   }
 }
 
-class _EmptyState extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) => Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.receipt_long_outlined,
-                size: 72, color: Colors.grey.shade300),
-            const SizedBox(height: 16),
-            const Text(
-              'No shipments yet',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w700,
-                color: AppColors.textPrimary,
-              ),
-            ),
-            const SizedBox(height: 6),
-            const Text(
-              'Your completed shipments will appear here.',
-              style: TextStyle(fontSize: 14, color: AppColors.textSecondary),
-              textAlign: TextAlign.center,
-            ),
-          ],
-        ),
-      );
-}
+// ──────────────────────────────────────────────────────────────────────────────
 
-class _HistoryCard extends StatelessWidget {
-  const _HistoryCard({required this.item, required this.onTap});
-  final ShipmentHistoryItem item;
+class _ShipmentCard extends StatelessWidget {
+  const _ShipmentCard({required this.shipment, required this.onTap});
+  final ShipmentRequest shipment;
   final VoidCallback onTap;
 
   @override
@@ -125,6 +99,7 @@ class _HistoryCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // Header row
             Row(
               children: [
                 Container(
@@ -135,7 +110,7 @@ class _HistoryCard extends StatelessWidget {
                     borderRadius: BorderRadius.circular(6),
                   ),
                   child: Text(
-                    '#${item.id}',
+                    '#${shipment.id}',
                     style: const TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w700,
@@ -144,46 +119,45 @@ class _HistoryCard extends StatelessWidget {
                     ),
                   ),
                 ),
-                const SizedBox(width: 8),
-                Text(
-                  _formatDate(item.date),
-                  style: const TextStyle(
-                    fontSize: 12,
-                    color: AppColors.textSecondary,
-                  ),
-                ),
                 const Spacer(),
-                _StatusBadge(status: item.status),
+                _StatusBadge(status: shipment.status),
               ],
             ),
             const SizedBox(height: 12),
+
+            // Route
             _RouteRow(
-              pickup: item.pickupAddress,
-              drop: item.dropAddress,
+              pickup: shipment.pickupLocation,
+              drop: shipment.dropoffLocation,
             ),
             const SizedBox(height: 12),
             const Divider(height: 1, color: AppColors.border),
             const SizedBox(height: 10),
+
+            // Footer
             Row(
               children: [
                 _MetaChip(
-                  icon: Icons.local_shipping_outlined,
-                  label: item.truckType,
+                  icon: Icons.category_outlined,
+                  label: shipment.cargoCategory.isNotEmpty
+                      ? shipment.cargoCategory
+                      : 'General',
                 ),
                 const SizedBox(width: 10),
                 _MetaChip(
-                  icon: Icons.straighten,
-                  label: '${item.distanceKm.toStringAsFixed(1)} km',
+                  icon: Icons.scale_outlined,
+                  label: '${shipment.weight.toStringAsFixed(0)} kg',
                 ),
                 const Spacer(),
-                Text(
-                  '₹${item.price.toStringAsFixed(0)}',
-                  style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w800,
-                    color: AppColors.textPrimary,
+                if (shipment.price != null && shipment.price! > 0)
+                  Text(
+                    '₹${shipment.price!.toStringAsFixed(0)}',
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w800,
+                      color: AppColors.textPrimary,
+                    ),
                   ),
-                ),
               ],
             ),
           ],
@@ -191,16 +165,9 @@ class _HistoryCard extends StatelessWidget {
       ),
     );
   }
-
-  String _formatDate(DateTime d) {
-    final now = DateTime.now();
-    final diff = now.difference(d).inDays;
-    if (diff == 0) return 'Today';
-    if (diff == 1) return 'Yesterday';
-    if (diff < 7) return '$diff days ago';
-    return '${d.day}/${d.month}/${d.year}';
-  }
 }
+
+// ──────────────────────────────────────────────────────────────────────────────
 
 class _RouteRow extends StatelessWidget {
   const _RouteRow({required this.pickup, required this.drop});
@@ -213,12 +180,9 @@ class _RouteRow extends StatelessWidget {
           Column(
             children: [
               const Icon(Icons.circle, size: 10, color: AppColors.primary),
-              Container(
-                width: 2,
-                height: 14,
-                color: Colors.grey.shade300,
-              ),
-              const Icon(Icons.location_on, size: 14, color: AppColors.orange),
+              Container(width: 2, height: 14, color: const Color(0xFFD1D5DB)),
+              const Icon(Icons.location_on,
+                  size: 14, color: AppColors.orange),
             ],
           ),
           const SizedBox(width: 10),
@@ -260,22 +224,58 @@ class _StatusBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final delivered = status.toLowerCase() == 'delivered';
+    final s = status.toUpperCase();
+    final Color bg;
+    final Color fg;
+
+    if (s == 'DELIVERED') {
+      bg = AppColors.primaryLight;
+      fg = AppColors.primaryDark;
+    } else if (s == 'REJECTED') {
+      bg = const Color(0xFFFEE2E2);
+      fg = AppColors.error;
+    } else if (s == 'ACCEPTED' || s == 'PICKED_UP') {
+      bg = const Color(0xFFFFF7ED);
+      fg = AppColors.orange;
+    } else {
+      bg = const Color(0xFFF3F4F6);
+      fg = AppColors.textSecondary;
+    }
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: delivered ? AppColors.primaryLight : AppColors.orangeLight,
+        color: bg,
         borderRadius: BorderRadius.circular(6),
       ),
       child: Text(
-        status,
+        _label(s),
         style: TextStyle(
           fontSize: 11,
           fontWeight: FontWeight.w700,
-          color: delivered ? AppColors.primaryDark : AppColors.orange,
+          color: fg,
         ),
       ),
     );
+  }
+
+  String _label(String s) {
+    switch (s) {
+      case 'PENDING':
+        return 'Pending';
+      case 'ACCEPTED':
+        return 'Accepted';
+      case 'PICKED_UP':
+        return 'Picked Up';
+      case 'DELIVERED':
+        return 'Delivered';
+      case 'REJECTED':
+        return 'Rejected';
+      case 'DRAFT':
+        return 'Draft';
+      default:
+        return s;
+    }
   }
 }
 
@@ -301,14 +301,16 @@ class _MetaChip extends StatelessWidget {
       );
 }
 
+// ──────────────────────────────────────────────────────────────────────────────
+
 class _DetailSheet extends StatelessWidget {
-  const _DetailSheet({required this.item});
-  final ShipmentHistoryItem item;
+  const _DetailSheet({required this.shipment});
+  final ShipmentRequest shipment;
 
   @override
   Widget build(BuildContext context) {
     return DraggableScrollableSheet(
-      initialChildSize: 0.55,
+      initialChildSize: 0.6,
       minChildSize: 0.4,
       maxChildSize: 0.9,
       builder: (context, scrollController) => Container(
@@ -326,7 +328,7 @@ class _DetailSheet extends StatelessWidget {
                 height: 4,
                 margin: const EdgeInsets.only(bottom: 16),
                 decoration: BoxDecoration(
-                  color: Colors.grey.shade300,
+                  color: const Color(0xFFD1D5DB),
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
@@ -342,29 +344,51 @@ class _DetailSheet extends StatelessWidget {
                   ),
                 ),
                 const Spacer(),
-                _StatusBadge(status: item.status),
+                _StatusBadge(status: shipment.status),
               ],
             ),
             const SizedBox(height: 20),
-            _InfoBlock(label: 'Booking ID', value: '#${item.id}'),
+            _InfoBlock(label: 'Shipment ID', value: '#${shipment.id}'),
+            if (shipment.tripId != null)
+              _InfoBlock(label: 'Trip ID', value: '#${shipment.tripId}'),
+            _InfoBlock(label: 'Category', value: shipment.cargoCategory),
             _InfoBlock(
-                label: 'Date',
+                label: 'Weight',
+                value: '${shipment.weight.toStringAsFixed(1)} kg'),
+            _InfoBlock(
+                label: 'Volume',
                 value:
-                    '${item.date.day}/${item.date.month}/${item.date.year}'),
-            _InfoBlock(label: 'Cargo', value: item.cargoName),
-            _InfoBlock(label: 'Truck Type', value: item.truckType),
-            _InfoBlock(
-                label: 'Distance',
-                value: '${item.distanceKm.toStringAsFixed(1)} km'),
+                    '${shipment.volume.toStringAsFixed(3)} m³'),
             const Divider(height: 24, color: AppColors.border),
-            _InfoBlock(label: 'Pickup', value: item.pickupAddress),
-            _InfoBlock(label: 'Drop', value: item.dropAddress),
+            _InfoBlock(label: 'Pickup', value: shipment.pickupLocation),
+            _InfoBlock(label: 'Drop', value: shipment.dropoffLocation),
+            if (shipment.feasibilityTrace != null &&
+                shipment.feasibilityTrace!.isNotEmpty) ...[
+              const Divider(height: 24, color: AppColors.border),
+              const Text(
+                'AI Evaluation',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.textSecondary,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                shipment.feasibilityTrace!,
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: AppColors.textSecondary,
+                  height: 1.5,
+                ),
+              ),
+            ],
             const Divider(height: 24, color: AppColors.border),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 const Text(
-                  'Amount Paid',
+                  'Price',
                   style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.w700,
@@ -372,7 +396,9 @@ class _DetailSheet extends StatelessWidget {
                   ),
                 ),
                 Text(
-                  '₹${item.price.toStringAsFixed(0)}',
+                  shipment.price != null && shipment.price! > 0
+                      ? '₹${shipment.price!.toStringAsFixed(0)}'
+                      : '—',
                   style: const TextStyle(
                     fontSize: 22,
                     fontWeight: FontWeight.w800,
@@ -418,9 +444,7 @@ class _InfoBlock extends StatelessWidget {
               child: Text(
                 label,
                 style: const TextStyle(
-                  fontSize: 13,
-                  color: AppColors.textSecondary,
-                ),
+                    fontSize: 13, color: AppColors.textSecondary),
               ),
             ),
             Expanded(

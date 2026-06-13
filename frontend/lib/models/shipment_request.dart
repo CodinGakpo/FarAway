@@ -9,6 +9,8 @@ class ShipmentRequest {
   final String status;
   final double? price;
   final String? tripId;
+  final bool feasibilityStatus;
+  final String? feasibilityTrace;
 
   ShipmentRequest({
     required this.id,
@@ -21,6 +23,8 @@ class ShipmentRequest {
     required this.status,
     this.price,
     this.tripId,
+    this.feasibilityStatus = false,
+    this.feasibilityTrace,
   });
 
   factory ShipmentRequest.fromJson(Map<String, dynamic> json) {

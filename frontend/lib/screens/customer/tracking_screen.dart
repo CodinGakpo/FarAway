@@ -24,7 +24,9 @@ class _TrackingScreenState extends State<TrackingScreen>
   int _step = 0;
   final int _totalSteps = 60;
 
-
+  // GlobalKey lets us push truck position updates to AppMap without rebuilding
+  // the entire widget tree — the architecture ready for real GPS streams.
+  final _mapKey = GlobalKey<AppMapState>();
 
   List<LatLng> _routePoints = [];
   LatLng? _truckPosition;
@@ -139,19 +141,10 @@ class _TrackingScreenState extends State<TrackingScreen>
           currentIdx < BookingStatus.nearDestination.index) {
         context.read<BookingProvider>().advanceStatus();
       }
-
-      _updateMarkers(booking);
-
-
     } else {
-      // Delivery complete
       _movementTimer?.cancel();
       _showDeliveredDialog();
     }
-  }
-
-  void _updateMarkers(Booking booking) {
-    setState(() {});
   }
 
   void _showDeliveredDialog() {

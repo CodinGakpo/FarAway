@@ -216,10 +216,14 @@ class _CreateTripScreenState extends State<CreateTripScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  // Fallback map preview
+                  // Route preview map
                   ClipRRect(
                     borderRadius: BorderRadius.circular(16),
-                    child: SizedBox(
+                    child: AppMap(
+                      pickup: _startLocation?.latLng,
+                      drop: _endLocation?.latLng,
+                      pickupLabel: _startLocation?.shortAddress,
+                      dropLabel: _endLocation?.shortAddress,
                       height: 180,
                       child: LiveMapWidget(
                         pickupLocation: _startLocation?.latLng,

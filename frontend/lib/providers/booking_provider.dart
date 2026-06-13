@@ -1,4 +1,3 @@
-import 'dart:math';
 import 'package:flutter/foundation.dart';
 import '../models/booking.dart';
 import '../models/shipment_draft.dart';
@@ -13,6 +12,9 @@ class BookingProvider extends ChangeNotifier {
   bool get hasActiveBooking =>
       _activeBooking != null && _activeBooking!.status.isActive;
 
+  /// Creates a real shipment via the backend:
+  /// 1. POST /shipments  — creates + runs AI evaluation
+  /// 2. POST /shipments/{id}/confirm — moves DRAFT → PENDING
   Future<Booking> createBooking(ShipmentDraft draft) async {
     final shipment = await ApiService().createShipment(
       draft.selectedTruck!.id,
@@ -32,8 +34,9 @@ class BookingProvider extends ChangeNotifier {
       draft: draft,
       status: BookingStatus.confirmed,
       createdAt: DateTime.now(),
-      finalPrice: draft.estimatedPrice,
+      finalPrice: confirmed.price ?? shipment.price ?? 0.0,
     );
+
     _activeBooking = booking;
     notifyListeners();
     return booking;

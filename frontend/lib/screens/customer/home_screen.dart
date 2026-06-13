@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
-
 import 'package:provider/provider.dart';
 import '../../core/app_theme.dart';
-import '../../models/location_point.dart';
 import '../../models/booking.dart';
+import '../../models/location_point.dart';
 import '../../providers/booking_provider.dart';
 import '../../providers/shipment_provider.dart';
 
@@ -22,6 +21,7 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   final DraggableScrollableController _sheetController =
       DraggableScrollableController();
+  final _mapKey = GlobalKey<AppMapState>();
 
   @override
   void dispose() {
@@ -29,13 +29,10 @@ class _HomeScreenState extends State<HomeScreen> {
     super.dispose();
   }
 
-  void _recenter() {
-    // No-op fallback
-  }
+  void _recenter() => _mapKey.currentState?.recenter();
 
-  void _updateMapOverlays(
-      LocationPoint? pickup, LocationPoint? drop) {
-    // No-op fallback
+  void _updateMapOverlays(LocationPoint? pickup, LocationPoint? drop) {
+    // AppMap reacts to prop changes via didUpdateWidget — no manual call needed
   }
 
 

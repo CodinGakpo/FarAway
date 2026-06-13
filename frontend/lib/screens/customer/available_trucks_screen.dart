@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../core/app_theme.dart';
-import '../../models/truck_option.dart';
+import '../../models/shipment_draft.dart';
+import '../../models/trip.dart';
 import '../../providers/shipment_provider.dart';
 import '../../services/mock_data_service.dart';
 import '../../services/api_service.dart';
@@ -12,8 +13,8 @@ class AvailableTrucksScreen extends StatefulWidget {
   const AvailableTrucksScreen({super.key});
 
   @override
-  State<AvailableTrucksScreen> createState() =>
-      _AvailableTrucksScreenState();
+  State<AvailableTrucksScreen>
+      createState() => _AvailableTrucksScreenState();
 }
 
 class _AvailableTrucksScreenState extends State<AvailableTrucksScreen> {
@@ -99,64 +100,45 @@ class _AvailableTrucksScreenState extends State<AvailableTrucksScreen> {
   @override
   Widget build(BuildContext context) {
     final draft = context.watch<ShipmentProvider>().draft;
-    final distance = draft.distanceKm;
 
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
-        title: const Text('Available Trucks'),
+        title: const Text('Available Trips'),
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(1),
           child: Container(height: 1, color: AppColors.border),
         ),
       ),
-      body: Column(
-        children: [
-          // Route summary strip
-          Container(
-            color: AppColors.surface,
-            padding: const EdgeInsets.fromLTRB(20, 10, 20, 14),
-            child: Row(
-              children: [
-                _RoutePin(color: AppColors.primary),
-                Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 10),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : _errorMessage != null
+              ? _ErrorView(
+                  message: _errorMessage!,
+                  onRetry: _loadTrips,
+                )
+              : _trips.isEmpty
+                  ? const _EmptyView()
+                  : Column(
                       children: [
-                        Text(
-                          draft.pickup?.shortAddress ?? '',
-                          style: const TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.textPrimary,
+                        _RouteSummaryStrip(draft: draft),
+                        const Divider(height: 1, color: AppColors.border),
+                        Expanded(
+                          child: RefreshIndicator(
+                            onRefresh: _loadTrips,
+                            child: ListView.separated(
+                              padding: const EdgeInsets.all(16),
+                              itemCount: _trips.length,
+                              separatorBuilder: (_, __) =>
+                                  const SizedBox(height: 12),
+                              itemBuilder: (_, i) => _TripCard(
+                                trip: _trips[i],
+                                draft: draft,
+                                isSelected: _selected?.id == _trips[i].id,
+                                onTap: () => _selectTrip(_trips[i]),
+                              ),
+                            ),
                           ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        const SizedBox(height: 2),
-                        Row(
-                          children: [
-                            Text(
-                              '${distance.toStringAsFixed(1)} km',
-                              style: const TextStyle(
-                                fontSize: 11,
-                                color: AppColors.textSecondary,
-                              ),
-                            ),
-                            const Text(
-                              '  •  ',
-                              style: TextStyle(color: AppColors.textSecondary),
-                            ),
-                            Text(
-                              draft.drop?.shortAddress ?? '',
-                              style: const TextStyle(
-                                fontSize: 11,
-                                color: AppColors.textSecondary,
-                              ),
-                            ),
-                          ],
                         ),
                       ],
                     ),
@@ -212,34 +194,127 @@ class _AvailableTrucksScreenState extends State<AvailableTrucksScreen> {
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text(
-                            'Total Estimate',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: AppColors.textSecondary,
-                            ),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                'Estimated Total',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: AppColors.textSecondary,
+                                ),
+                              ),
+                              Text(
+                                '₹${draft.estimatedPrice.toStringAsFixed(0)}',
+                                style: const TextStyle(
+                                  fontSize: 24,
+                                  fontWeight: FontWeight.w800,
+                                  color: AppColors.textPrimary,
+                                ),
+                              ),
+                            ],
                           ),
-                          Text(
-                            '₹${_selected!.estimatedTotal(distance).toStringAsFixed(0)}',
-                            style: const TextStyle(
-                              fontSize: 24,
-                              fontWeight: FontWeight.w800,
-                              color: AppColors.textPrimary,
+                          const Text(
+                            'Final price set by AI',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: AppColors.textSecondary,
+                              fontStyle: FontStyle.italic,
                             ),
                           ),
                         ],
                       ),
-                      _PriceBreakdown(truck: _selected!, distanceKm: distance),
+                    ),
+                    ElevatedButton(
+                      onPressed: _book,
+                      child: const Text('Book This Trip'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+    );
+  }
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+
+class _RouteSummaryStrip extends StatelessWidget {
+  const _RouteSummaryStrip({required this.draft});
+  final ShipmentDraft draft;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      color: AppColors.surface,
+      padding: const EdgeInsets.fromLTRB(20, 10, 20, 14),
+      child: Row(
+        children: [
+          Container(
+            width: 10,
+            height: 10,
+            decoration: const BoxDecoration(
+              color: AppColors.primary,
+              shape: BoxShape.circle,
+            ),
+          ),
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 10),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    draft.pickup?.shortAddress ?? '',
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.textPrimary,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 2),
+                  Row(
+                    children: [
+                      Text(
+                        '${draft.distanceKm.toStringAsFixed(1)} km',
+                        style: const TextStyle(
+                          fontSize: 11,
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                      const Text(
+                        '  •  ',
+                        style:
+                            TextStyle(color: AppColors.textSecondary),
+                      ),
+                      Flexible(
+                        child: Text(
+                          draft.drop?.shortAddress ?? '',
+                          style: const TextStyle(
+                            fontSize: 11,
+                            color: AppColors.textSecondary,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
                     ],
                   ),
-                ),
-              ElevatedButton(
-                onPressed: _selected != null ? _book : null,
-                child: const Text('Book Shipment'),
+                ],
               ),
-            ],
+            ),
           ),
-        ),
+          Container(
+            width: 10,
+            height: 10,
+            decoration: const BoxDecoration(
+              color: AppColors.orange,
+              shape: BoxShape.circle,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -247,33 +322,23 @@ class _AvailableTrucksScreenState extends State<AvailableTrucksScreen> {
 
 // ──────────────────────────────────────────────────────────────────────────────
 
-class _RoutePin extends StatelessWidget {
-  const _RoutePin({required this.color});
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) => Container(
-        width: 10,
-        height: 10,
-        decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-      );
-}
-
-class _TruckCard extends StatelessWidget {
-  const _TruckCard({
-    required this.truck,
-    required this.price,
+class _TripCard extends StatelessWidget {
+  const _TripCard({
+    required this.trip,
+    required this.draft,
     required this.isSelected,
     required this.onTap,
   });
 
-  final TruckOption truck;
-  final double price;
+  final Trip trip;
+  final ShipmentDraft draft;
   final bool isSelected;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
+    final estimatedPrice = draft.estimatedPrice;
+
     return GestureDetector(
       onTap: onTap,
       child: AnimatedContainer(
@@ -290,9 +355,9 @@ class _TruckCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // Header row
             Row(
               children: [
-                // Truck icon container
                 Container(
                   width: 52,
                   height: 52,
@@ -316,18 +381,21 @@ class _TruckCard extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        truck.type,
+                        '${trip.origin} → ${trip.destination}',
                         style: const TextStyle(
-                          fontSize: 16,
+                          fontSize: 15,
                           fontWeight: FontWeight.w700,
                           color: AppColors.textPrimary,
                         ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        truck.capacityLabel,
+                        '${trip.remainingWeight.toStringAsFixed(0)} kg · '
+                        '${trip.remainingVolume.toStringAsFixed(1)} m³ available',
                         style: const TextStyle(
-                          fontSize: 13,
+                          fontSize: 12,
                           color: AppColors.textSecondary,
                         ),
                       ),
@@ -338,17 +406,17 @@ class _TruckCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
                     Text(
-                      '₹${price.toStringAsFixed(0)}',
+                      '₹${estimatedPrice.toStringAsFixed(0)}',
                       style: const TextStyle(
                         fontSize: 20,
                         fontWeight: FontWeight.w800,
                         color: AppColors.textPrimary,
                       ),
                     ),
-                    Text(
-                      '₹${truck.pricePerKm.toStringAsFixed(0)}/km',
-                      style: const TextStyle(
-                        fontSize: 11,
+                    const Text(
+                      'estimate',
+                      style: TextStyle(
+                        fontSize: 10,
                         color: AppColors.textSecondary,
                       ),
                     ),
@@ -362,18 +430,18 @@ class _TruckCard extends StatelessWidget {
             Row(
               children: [
                 _Tag(
-                  icon: Icons.access_time,
-                  label: truck.pickupEta,
+                  icon: Icons.calendar_today_outlined,
+                  label: _fmtDate(trip.date),
                   color: AppColors.orange,
                 ),
                 const SizedBox(width: 10),
                 _Tag(
-                  icon: Icons.star_rounded,
-                  label: '${truck.rating} (${truck.reviewCount})',
-                  color: const Color(0xFFF59E0B),
+                  icon: Icons.scale_outlined,
+                  label: 'Max ${trip.maxWeight.toStringAsFixed(0)} kg',
+                  color: AppColors.primary,
                 ),
-                const Spacer(),
-                if (isSelected)
+                if (isSelected) ...[
+                  const Spacer(),
                   Container(
                     padding: const EdgeInsets.symmetric(
                         horizontal: 10, vertical: 4),
@@ -390,20 +458,25 @@ class _TruckCard extends StatelessWidget {
                       ),
                     ),
                   ),
+                ],
               ],
-            ),
-            const SizedBox(height: 8),
-            Text(
-              truck.description,
-              style: const TextStyle(
-                fontSize: 12,
-                color: AppColors.textSecondary,
-              ),
             ),
           ],
         ),
       ),
     );
+  }
+
+  String _fmtDate(DateTime d) {
+    const months = [
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+    ];
+    final h = d.hour;
+    final m = d.minute.toString().padLeft(2, '0');
+    final ampm = h >= 12 ? 'PM' : 'AM';
+    final hr = (h % 12 == 0 ? 12 : h % 12).toString();
+    return '${d.day} ${months[d.month - 1]}, $hr:$m $ampm';
   }
 }
 
@@ -431,111 +504,63 @@ class _Tag extends StatelessWidget {
       );
 }
 
-class _PriceBreakdown extends StatelessWidget {
-  const _PriceBreakdown(
-      {required this.truck, required this.distanceKm});
-  final TruckOption truck;
-  final double distanceKm;
+// ──────────────────────────────────────────────────────────────────────────────
+
+class _ErrorView extends StatelessWidget {
+  const _ErrorView({required this.message, required this.onRetry});
+  final String message;
+  final VoidCallback onRetry;
 
   @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: () => _showBreakdown(context),
-      child: const Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            'View breakdown',
-            style: TextStyle(
-              fontSize: 12,
-              color: AppColors.primary,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          Icon(Icons.info_outline,
-              size: 14, color: AppColors.primary),
-        ],
-      ),
-    );
-  }
-
-  void _showBreakdown(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (context) => Padding(
+  Widget build(BuildContext context) => ListView(
         padding: const EdgeInsets.all(24),
+        children: [
+          const SizedBox(height: 80),
+          const Icon(Icons.wifi_off_rounded,
+              size: 64, color: Color(0xFFD1D5DB)),
+          const SizedBox(height: 16),
+          Text(
+            message,
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: AppColors.textSecondary),
+          ),
+          const SizedBox(height: 20),
+          ElevatedButton(
+            onPressed: onRetry,
+            child: const Text('Retry'),
+          ),
+        ],
+      );
+}
+
+class _EmptyView extends StatelessWidget {
+  const _EmptyView();
+
+  @override
+  Widget build(BuildContext context) => const Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'Price Breakdown',
+            Icon(Icons.local_shipping_outlined,
+                size: 72, color: Color(0xFFD1D5DB)),
+            SizedBox(height: 16),
+            Text(
+              'No active trips found',
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.w700,
                 color: AppColors.textPrimary,
               ),
             ),
-            const SizedBox(height: 16),
-            _Row('Base price', '₹${truck.basePrice.toStringAsFixed(0)}'),
-            _Row(
-              'Distance charge',
-              '${distanceKm.toStringAsFixed(1)} km × ₹${truck.pricePerKm.toStringAsFixed(0)}/km',
-            ),
-            _Row(
-              '',
-              '= ₹${(distanceKm * truck.pricePerKm).toStringAsFixed(0)}',
-            ),
-            const Divider(height: 24, color: AppColors.border),
-            _Row(
-              'Total',
-              '₹${truck.estimatedTotal(distanceKm).toStringAsFixed(0)}',
-              bold: true,
-            ),
-            const SizedBox(height: 8),
-            const Text(
-              '* Final price may vary based on actual weight, distance and tolls.',
+            SizedBox(height: 6),
+            Text(
+              'No drivers have active trips matching\nyour route right now.',
               style: TextStyle(
-                fontSize: 11,
+                fontSize: 13,
                 color: AppColors.textSecondary,
               ),
+              textAlign: TextAlign.center,
             ),
-            const SizedBox(height: 16),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _Row extends StatelessWidget {
-  const _Row(this.label, this.value, {this.bold = false});
-  final String label;
-  final String value;
-  final bool bold;
-
-  @override
-  Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.symmetric(vertical: 4),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(label,
-                style: TextStyle(
-                  fontSize: 14,
-                  color: AppColors.textSecondary,
-                  fontWeight:
-                      bold ? FontWeight.w700 : FontWeight.normal,
-                )),
-            Text(value,
-                style: TextStyle(
-                  fontSize: 14,
-                  color: AppColors.textPrimary,
-                  fontWeight: bold ? FontWeight.w700 : FontWeight.w600,
-                )),
           ],
         ),
       );

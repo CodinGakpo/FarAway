@@ -1,3 +1,4 @@
+import logging
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List, Optional
@@ -7,6 +8,8 @@ from app.models import Shipment, Trip, User
 from app.schemas import ShipmentCreate, ShipmentResponse, ShipmentStatusUpdate
 from app.auth import get_current_user, RoleChecker
 from app.services.agent_service import FreightShareAgentService
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(
     prefix="/shipments",
@@ -22,16 +25,29 @@ def create_shipment_request(
     db: Session = Depends(get_db), 
     current_user: User = Depends(shipper_only)
 ):
+    logger.info(
+        "shipment_create_request | user_id=%s trip_id=%s pickup=%r dropoff=%r "
+        "weight=%.1f volume=%.3f category=%r",
+        current_user.id, shipment_in.trip_id,
+        shipment_in.pickup_location, shipment_in.dropoff_location,
+        shipment_in.weight, shipment_in.volume, shipment_in.cargo_category,
+    )
+
     # 1. Verify trip exists
     trip = db.query(Trip).filter(Trip.id == shipment_in.trip_id).first()
     if not trip:
+        logger.warning("shipment_create_fail | reason=trip_not_found trip_id=%s", shipment_in.trip_id)
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Target trip with ID {shipment_in.trip_id} not found"
         )
-    
+
     # 2. Check if trip is active
     if trip.status.upper() != "ACTIVE":
+        logger.warning(
+            "shipment_create_fail | reason=trip_not_active trip_id=%s trip_status=%s",
+            trip.id, trip.status,
+        )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Cannot book shipment on an inactive or completed trip"
@@ -191,8 +207,31 @@ def update_shipment_status(
             detail=f"Invalid status change sequence requested."
         )
 
-    # Update state
+    # Persist the new status
+    old_status = shipment.status
     shipment.status = new_status
+    logger.info(
+        "shipment_status_update | shipment_id=%s trip_id=%s %s→%s user_id=%s",
+        shipment_id, trip.id, old_status, new_status, current_user.id,
+    )
+
+    # Auto-complete the trip when a shipment reaches DELIVERED:
+    # check if every shipment on this trip is now in a terminal state.
+    # Terminal states: DELIVERED, REJECTED (booking never progressed or was refused).
+    if new_status == "DELIVERED":
+        _TERMINAL = {"DELIVERED", "REJECTED"}
+        sibling_shipments = db.query(Shipment).filter(
+            Shipment.trip_id == trip.id,
+            Shipment.id != shipment_id,
+        ).all()
+        all_terminal = all(s.status in _TERMINAL for s in sibling_shipments)
+        if all_terminal:
+            trip.status = "COMPLETED"
+            logger.info(
+                "trip_auto_completed | trip_id=%s all_shipments_terminal=True",
+                trip.id,
+            )
+
     db.commit()
     db.refresh(shipment)
     return shipment
