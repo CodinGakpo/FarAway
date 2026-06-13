@@ -30,7 +30,7 @@
              Without a valid key the map renders grey but the app still starts. -->
         <meta-data
             android:name="com.google.android.geo.API_KEY"
-            android:value="YOUR_API_KEY"/>
+            android:value="AIzaSyBxYf92AEyd8SFtpenUJwgSw9eTZ9YhON0"/>
 
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->

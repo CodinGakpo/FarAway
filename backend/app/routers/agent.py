@@ -53,7 +53,9 @@ def evaluate_shipment_feasibility(
         trip_origin=trip.origin_name,
         trip_destination=trip.destination_name,
         rem_weight=trip.remaining_weight_capacity,
-        rem_volume=trip.remaining_volume_capacity
+        rem_volume=trip.remaining_volume_capacity,
+        trip_id=trip.id,
+        db=db
     )
 
     return AgentEvaluationResponse(

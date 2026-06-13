@@ -43,6 +43,39 @@ class GeoService:
         Returns (lat, lng).
         """
         name = city_name.lower().split(',')[0].strip()
+        search_query = f"{name}, India"
+        
+        # Check if we have Google Maps API Key for true geocoding
+        if GOOGLE_MAPS_API_KEY:
+            try:
+                # We use the Geocoding API
+                url = f"https://maps.googleapis.com/maps/api/geocode/json?address={search_query}&key={GOOGLE_MAPS_API_KEY}"
+                response = httpx.get(url, timeout=3.0)
+                if response.status_code == 200:
+                    data = response.json()
+                    if "results" in data and len(data["results"]) > 0:
+                        location = data["results"][0]["geometry"]["location"]
+                        logger.info(f"Geocoded '{city_name}' using Google Maps to {location['lat']}, {location['lng']}")
+                        return location["lat"], location["lng"]
+            except Exception as e:
+                logger.error(f"Geocoding API failed for '{city_name}': {e}")
+                
+        # Fallback to OpenStreetMap Nominatim
+        try:
+            url = f"https://nominatim.openstreetmap.org/search?q={search_query}&format=json&limit=1"
+            headers = {"User-Agent": "FreightShareApp/1.0"}
+            response = httpx.get(url, headers=headers, timeout=3.0)
+            if response.status_code == 200:
+                data = response.json()
+                if len(data) > 0:
+                    lat = float(data[0]["lat"])
+                    lng = float(data[0]["lon"])
+                    logger.info(f"Geocoded '{city_name}' using Nominatim to {lat}, {lng}")
+                    return lat, lng
+        except Exception as e:
+            logger.error(f"Nominatim Geocoding API failed for '{city_name}': {e}")
+                
+        # Fallback lookup
         return CITY_COORDINATES.get(name, (12.9716, 77.5946)) # default to Bangalore
 
     @classmethod

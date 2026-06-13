@@ -1,17 +1,101 @@
 import logging
 from typing import Dict, Any, Tuple
 import os
+from sqlalchemy.orm import Session
+from sqlalchemy import text
+from app.services.geo_service import GeoService
 
 logger = logging.getLogger(__name__)
 
+USE_GEOMETRY_MATCHING = True
+
 class FreightShareAgentService:
     @staticmethod
-    def check_route_feasibility(origin: str, destination: str, pickup: str, dropoff: str) -> Tuple[bool, str]:
+    def check_route_feasibility(
+        origin: str, destination: str, pickup: str, dropoff: str,
+        trip_id: int = None, db: Session = None
+    ) -> Tuple[bool, str]:
         """
         Tool: check_route_feasibility
         Checks if the pickup and dropoff points lie within a reasonable deviation
-        from the driver's main route.
+        from the driver's main route using true PostGIS geometry matching.
         """
+        if USE_GEOMETRY_MATCHING and trip_id and db:
+            logger.info(f"route_match_start: trip_id={trip_id}, pickup={pickup}, dropoff={dropoff}")
+            
+            try:
+                # 1. Geocode pickup and dropoff
+                pu_lat, pu_lng = GeoService.get_city_coords(pickup)
+                do_lat, do_lng = GeoService.get_city_coords(dropoff)
+
+                # Phase 3 Thresholds:
+                # 15km default threshold (15000 meters).
+                # Justification: Major transit corridors (highways) often bypass city centers. 
+                # A 15km radius captures logistics hubs on the outskirts (e.g. ITPL/Whitefield from Bangalore bypass, 
+                # or Sriperumbudur from Chennai NH48) without forcing trucks deep into urban congestion.
+                corridor_threshold_km = 15.0
+                corridor_threshold_m = corridor_threshold_km * 1000.0
+
+                # 2. Query PostGIS using existing trip geometry
+                query = text("""
+                    SELECT
+                        ST_Distance(route_geometry::geography, ST_MakePoint(:pu_lng, :pu_lat)::geography) AS pu_dist,
+                        ST_Distance(route_geometry::geography, ST_MakePoint(:do_lng, :do_lat)::geography) AS do_dist,
+                        ST_LineLocatePoint(
+                            ST_Transform(ST_SetSRID(route_geometry::geometry, 4326), 3857),
+                            ST_Transform(ST_SetSRID(ST_MakePoint(:pu_lng, :pu_lat)::geometry, 4326), 3857)
+                        ) AS pu_pos,
+                        ST_LineLocatePoint(
+                            ST_Transform(ST_SetSRID(route_geometry::geometry, 4326), 3857),
+                            ST_Transform(ST_SetSRID(ST_MakePoint(:do_lng, :do_lat)::geometry, 4326), 3857)
+                        ) AS do_pos
+                    FROM trips
+                    WHERE id = :trip_id
+                """)
+                
+                result = db.execute(query, {
+                    "pu_lng": pu_lng, "pu_lat": pu_lat,
+                    "do_lng": do_lng, "do_lat": do_lat,
+                    "trip_id": trip_id
+                }).fetchone()
+
+                if result:
+                    pu_dist = result.pu_dist
+                    do_dist = result.do_dist
+                    pu_pos = result.pu_pos
+                    do_pos = result.do_pos
+
+                    logger.info(f"pickup_distance_to_route: {pu_dist} meters")
+                    logger.info(f"dropoff_distance_to_route: {do_dist} meters")
+                    logger.info(f"route_position_check: pickup_fraction={pu_pos}, dropoff_fraction={do_pos}")
+
+                    feasible = True
+                    reasons = []
+                    
+                    if pu_dist > corridor_threshold_m:
+                        feasible = False
+                        reasons.append(f"Pickup '{pickup}' is {pu_dist/1000:.1f}km away from route (Limit {corridor_threshold_km}km).")
+                    
+                    if do_dist > corridor_threshold_m:
+                        feasible = False
+                        reasons.append(f"Dropoff '{dropoff}' is {do_dist/1000:.1f}km away from route (Limit {corridor_threshold_km}km).")
+
+                    if pu_pos >= do_pos:
+                        feasible = False
+                        reasons.append(f"Wrong direction. Dropoff appears before pickup on the route.")
+
+                    if feasible:
+                        msg = f"Route is feasible via geometry matching. Pickup ({pu_dist/1000:.1f}km deviation) and dropoff ({do_dist/1000:.1f}km deviation) are within the {corridor_threshold_km}km threshold, and in the correct chronological direction."
+                        logger.info(f"route_match_result: feasible=True")
+                        return True, msg
+                    else:
+                        reason_str = " ".join(reasons)
+                        logger.info(f"route_match_result: feasible=False, rejection_reason='{reason_str}'")
+                        return False, f"Route infeasible. {reason_str}"
+            except Exception as e:
+                logger.error(f"Geometry matching failed: {e}. Falling back to legacy matching.")
+
+        # --- Legacy Fallback ---
         o = origin.lower().strip()
         d = destination.lower().strip()
         p = pickup.lower().strip()
@@ -147,7 +231,9 @@ class FreightShareAgentService:
         trip_origin: str, 
         trip_destination: str, 
         rem_weight: float, 
-        rem_volume: float
+        rem_volume: float,
+        trip_id: int = None,
+        db: Session = None
     ) -> Dict[str, Any]:
         """
         Executes the AI agent planning loop.
@@ -161,7 +247,9 @@ class FreightShareAgentService:
 
         # Step 1: Route Feasibility check
         trace_steps.append("\n🔍 Step 1: Invoking Tool 'check_route_feasibility'...")
-        route_ok, route_msg = cls.check_route_feasibility(trip_origin, trip_destination, pickup, dropoff)
+        route_ok, route_msg = cls.check_route_feasibility(
+            trip_origin, trip_destination, pickup, dropoff, trip_id, db
+        )
         trace_steps.append(f"🛠️ [Tool Output - check_route_feasibility]: {route_msg}")
         
         if not route_ok:

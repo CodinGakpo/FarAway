@@ -34,6 +34,9 @@ services:
       - JWT_ALGORITHM=HS256
       - FIREBASE_PROJECT_ID=faraway-f005b
       - LOCAL_DEV_MODE=true
+      - GOOGLE_MAPS_API_KEY=${GOOGLE_MAPS_API_KEY}
+    env_file:
+      - .env
     depends_on:
       db:
         condition: service_healthy
