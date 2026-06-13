@@ -219,7 +219,9 @@ def get_trip_shipments(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Trip not found"
         )
+    # DELIVERED is excluded: completed shipments are no longer "active".
+    # They appear in GET /shipments (customer history) once terminal.
     return db.query(Shipment).filter(
-        Shipment.trip_id == trip_id, 
-        Shipment.status.in_(["ACCEPTED", "PICKED_UP", "DELIVERED"])
+        Shipment.trip_id == trip_id,
+        Shipment.status.in_(["ACCEPTED", "PICKED_UP"]),
     ).all()
